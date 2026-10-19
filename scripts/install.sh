@@ -30,20 +30,27 @@ case "$os" in
   *) err "unsupported OS '$os'. On Windows, download the .zip from the Releases page." ;;
 esac
 
+# curl with sane retries and HTTPS pinned. Writing to a real temp file (not a
+# pipe) avoids the "curl: (23) Failure writing output" some setups hit when the
+# consuming program closes the pipe early.
+dl() { curl -fL --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 "$@"; }
+
+# --- download + extract ---------------------------------------------------
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
 # --- resolve the latest release tag --------------------------------------
 say "finding the latest release"
-tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-  | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+dl -s "https://api.github.com/repos/$REPO/releases/latest" -o "$tmp/rel.json" \
+  || err "could not reach GitHub to find a release"
+tag="$(grep -m1 '"tag_name"' "$tmp/rel.json" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
 [ -n "${tag:-}" ] || err "no published release found yet. Build from source: https://github.com/$REPO"
 
 asset="laplink-${tag}-${target}.tar.gz"
 url="https://github.com/$REPO/releases/download/${tag}/${asset}"
 
-# --- download + extract ---------------------------------------------------
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
 say "downloading $asset ($tag)"
-curl -fSL "$url" -o "$tmp/pkg.tar.gz" || err "download failed: $url"
+dl "$url" -o "$tmp/pkg.tar.gz" || err "download failed: $url"
 tar -xzf "$tmp/pkg.tar.gz" -C "$tmp"
 src="$tmp/laplink-${tag}-${target}"
 

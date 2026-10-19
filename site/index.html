@@ -3,259 +3,357 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LaptopLink — move files straight across</title>
-<meta name="description" content="LaptopLink is an open-source tool for moving files and folders directly between your computers: encrypted end to end, verified byte for byte, resumable, and fast." />
+<title>LaptopLink — a direct, encrypted line between your computers</title>
+<meta name="description" content="LaptopLink moves files and folders straight from one of your computers to another: encrypted end to end, verified byte for byte, resumable, and fast. Open source, written in Rust." />
 <meta property="og:title" content="LaptopLink" />
-<meta property="og:description" content="Secure, fast, resumable file transfer between your own computers. Open source, written in Rust." />
+<meta property="og:description" content="A direct, encrypted line between your computers. Send files and folders with no cloud in the middle." />
 <meta property="og:type" content="website" />
-<meta name="theme-color" content="#000000" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='black'/><text y='72' x='50' font-size='64' text-anchor='middle' fill='white' font-family='monospace' font-weight='bold'>L</text></svg>" />
+<meta name="theme-color" content="#ffffff" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='black'/><g stroke='white' stroke-width='8' fill='none'><circle cx='30' cy='50' r='11'/><circle cx='70' cy='50' r='11'/><path d='M41 50 H59'/></g></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --ink:#0a0a0a; --paper:#ffffff;
-    --g1:#111; --g2:#3a3a3a; --g3:#6b6b6b; --g4:#9a9a9a; --g5:#e6e6e6; --g6:#f4f4f4;
-    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-    --r:14px;
+    --ink:#000000;
+    --paper:#ffffff;
+    --ink-2:#2b2b2b;     /* secondary text */
+    --mut:#767676;       /* muted text */
+    --hair:#e3e3e3;      /* hairlines */
+    --wash:#f6f6f5;      /* section wash */
+    --wash-2:#efefee;
+    --disp:"Space Grotesk",-apple-system,system-ui,sans-serif;
+    --body:"Inter",-apple-system,system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
-    line-height:1.65;-webkit-font-smoothing:antialiased;letter-spacing:-0.01em}
-  a{color:inherit}
-  .wrap{max-width:1040px;margin:0 auto;padding:0 28px}
-  .mono{font-family:var(--mono)}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--body);font-size:17px;line-height:1.6;font-weight:400;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  h1,h2,h3{font-family:var(--disp);font-weight:600;letter-spacing:-0.02em;line-height:1.05;margin:0}
 
-  /* reveal on load */
-  .rise{opacity:0;transform:translateY(14px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
-  .rise.d1{animation-delay:.05s}.rise.d2{animation-delay:.12s}.rise.d3{animation-delay:.2s}.rise.d4{animation-delay:.28s}
-  @keyframes rise{to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){.rise{animation:none;opacity:1;transform:none}}
+  /* ---- top bar ---- */
+  .top{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.88);
+    backdrop-filter:saturate(120%) blur(8px);border-bottom:1px solid var(--hair)}
+  .top .wrap{display:flex;align-items:center;justify-content:space-between;height:70px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:var(--disp);font-weight:600;font-size:19px}
+  .brand svg{display:block}
+  .top nav{display:flex;align-items:center;gap:30px}
+  .top nav a{font-size:15px;color:var(--ink-2)}
+  .top nav a:hover{color:var(--ink)}
+  .top nav .src{border:1px solid var(--ink);border-radius:9px;padding:8px 15px;font-weight:500;color:var(--ink)}
+  .top nav .src:hover{background:var(--ink);color:var(--paper)}
 
-  /* nav */
-  header.nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.82);
-    backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid var(--g5)}
-  .nav .wrap{display:flex;align-items:center;justify-content:space-between;height:66px}
-  .brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:19px;letter-spacing:-.03em}
-  .mark{width:30px;height:30px;border-radius:9px;background:var(--ink);color:var(--paper);
-    display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:17px}
-  nav.links a{font-size:14.5px;text-decoration:none;color:var(--g2);margin-left:26px;transition:color .15s}
-  nav.links a:hover{color:var(--ink)}
-  nav.links a.gh{color:var(--paper);background:var(--ink);padding:9px 15px;border-radius:9px;margin-left:26px}
-  nav.links a.gh:hover{color:var(--paper);opacity:.88}
+  /* ---- hero ---- */
+  .hero{padding:92px 0 40px}
+  .hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  .hero h1{font-size:clamp(44px,6vw,76px);font-weight:700;letter-spacing:-0.035em}
+  .hero .sub{font-size:20px;color:var(--ink-2);max-width:30ch;margin:26px 0 0}
+  .hero .actions{display:flex;gap:14px;margin:34px 0 0;flex-wrap:wrap}
+  .btn{font-family:var(--body);font-weight:550;font-size:16px;border-radius:11px;padding:14px 22px;display:inline-block;border:1px solid var(--ink);transition:transform .14s ease, background .14s ease, color .14s ease}
+  .btn.primary{background:var(--ink);color:var(--paper)}
+  .btn.primary:hover{transform:translateY(-2px)}
+  .btn.secondary{background:var(--paper);color:var(--ink)}
+  .btn.secondary:hover{background:var(--ink);color:var(--paper)}
+  .hero .micro{margin:22px 0 0;font-size:14.5px;color:var(--mut)}
 
-  /* hero */
-  .hero{padding:96px 0 72px;position:relative;overflow:hidden}
-  .hero::before{content:"";position:absolute;inset:0;z-index:-1;
-    background-image:linear-gradient(var(--g6) 1px,transparent 1px),linear-gradient(90deg,var(--g6) 1px,transparent 1px);
-    background-size:34px 34px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0,#000 40%,transparent 78%)}
-  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;
-    color:var(--g2);border:1px solid var(--g5);border-radius:999px;padding:6px 13px;margin-bottom:26px;background:var(--paper)}
-  .eyebrow .d{width:7px;height:7px;border-radius:50%;background:var(--ink)}
-  .hero h1{font-size:clamp(46px,8.5vw,104px);line-height:.98;letter-spacing:-.045em;margin:0 0 24px;font-weight:800}
-  .hero h1 .thin{color:var(--g3);font-weight:300}
-  .hero p.lead{font-size:clamp(18px,2.2vw,22px);color:var(--g2);max-width:52ch;margin:0 0 36px}
-  .cta{display:flex;gap:13px;flex-wrap:wrap;align-items:center}
-  .btn{font-size:15px;font-weight:600;text-decoration:none;padding:13px 22px;border-radius:11px;transition:transform .12s,box-shadow .12s,opacity .12s;display:inline-block}
-  .btn.solid{background:var(--ink);color:var(--paper)}
-  .btn.solid:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.18)}
-  .btn.ghost{border:1px solid var(--g4);color:var(--ink)}
-  .btn.ghost:hover{border-color:var(--ink);transform:translateY(-2px)}
+  /* ---- connection visual (the one bold element) ---- */
+  .link-viz{position:relative;aspect-ratio:1/0.92;border:1px solid var(--hair);border-radius:20px;
+    background:
+      radial-gradient(60% 60% at 50% 0%, var(--wash) 0%, transparent 70%),
+      var(--paper);
+    overflow:hidden}
+  .grid-bg{position:absolute;inset:0;opacity:.6;
+    background-image:linear-gradient(var(--wash-2) 1px,transparent 1px),linear-gradient(90deg,var(--wash-2) 1px,transparent 1px);
+    background-size:28px 28px;mask-image:radial-gradient(90% 75% at 50% 45%,#000 55%,transparent 100%)}
+  .node{position:absolute;top:50%;transform:translateY(-50%);width:120px;height:92px;border-radius:14px;
+    border:1.5px solid var(--ink);background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;z-index:3}
+  .node .scr{width:78px;height:46px;border-radius:7px;border:1.5px solid var(--ink)}
+  .node .base{width:96px;height:6px;border-radius:3px;background:var(--ink)}
+  .node .tag{position:absolute;bottom:-26px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:13px;color:var(--mut)}
+  .node.a{left:26px}
+  .node.b{right:26px}
+  .node.b .scr{background:var(--ink)}         /* received: screen "fills in" */
+  .channel{position:absolute;top:50%;left:146px;right:146px;height:2px;transform:translateY(-50%);background:var(--hair);z-index:1}
+  .channel .fill{position:absolute;inset:0;width:0;background:var(--ink);animation:fill 2.1s cubic-bezier(.65,0,.35,1) .35s forwards}
+  .packet{position:absolute;top:50%;left:146px;width:12px;height:12px;border-radius:3px;background:var(--ink);transform:translate(0,-50%) rotate(45deg);z-index:2;
+    animation:fly 1.5s linear .4s 3;opacity:0}
+  .check{position:absolute;top:calc(50% - 60px);left:50%;transform:translate(-50%,0) scale(.6);z-index:4;
+    width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font-size:18px;opacity:0;
+    animation:pop .4s ease 2.5s forwards}
+  .viz-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;font-size:13px;color:var(--mut)}
+  @keyframes fill{to{width:100%}}
+  @keyframes fly{0%{left:146px;opacity:0}8%{opacity:1}92%{opacity:1}100%{left:calc(100% - 158px);opacity:0}}
+  @keyframes pop{0%{opacity:0;transform:translate(-50%,0) scale(.6)}60%{opacity:1;transform:translate(-50%,-4px) scale(1.12)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
+  @media (prefers-reduced-motion:reduce){
+    .channel .fill{animation:none;width:100%}
+    .packet{display:none}
+    .check{animation:none;opacity:1;transform:translate(-50%,0) scale(1)}
+  }
 
-  /* install line */
-  .install{margin-top:30px;display:inline-flex;align-items:center;gap:14px;max-width:100%;
-    border:1px solid var(--g5);border-radius:12px;background:var(--g6);padding:12px 14px;font-family:var(--mono);font-size:13.5px;overflow:auto}
-  .install .p{color:var(--g4)}
-  .install code{white-space:nowrap}
-  .install button{margin-left:auto;font-family:var(--mono);font-size:12px;border:1px solid var(--g4);
-    background:var(--paper);color:var(--ink);border-radius:8px;padding:5px 11px;cursor:pointer;transition:all .12s}
-  .install button:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  /* ---- statement ---- */
+  .statement{padding:84px 0;border-top:1px solid var(--hair)}
+  .statement p{font-family:var(--disp);font-weight:500;font-size:clamp(26px,3.6vw,40px);letter-spacing:-0.02em;line-height:1.18;margin:0;max-width:20ch}
+  .statement p span{color:var(--mut)}
 
-  /* terminal */
-  .term{margin-top:46px;border-radius:var(--r);overflow:hidden;border:1px solid var(--g5);
-    box-shadow:0 24px 60px -24px rgba(0,0,0,.35)}
-  .term .bar{display:flex;align-items:center;gap:8px;background:var(--ink);padding:12px 15px}
-  .term .bar .dot{width:11px;height:11px;border-radius:50%;background:#4a4a4a}
-  .term .bar .ttl{margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--g4)}
-  .term pre{margin:0;background:var(--g1);color:#eaeaea;font-family:var(--mono);font-size:13.5px;
-    line-height:1.75;padding:20px 18px;overflow-x:auto}
-  .term .c{color:#8a8a8a}.term .ok{color:#fff}
+  /* ---- features: hairline grid, no cards/shadows ---- */
+  .features{padding:16px 0 92px}
+  .feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 64px}
+  .feat{padding:30px 0;border-top:1px solid var(--hair)}
+  .feat h3{font-size:21px;font-weight:600;margin-bottom:8px}
+  .feat p{margin:0;color:var(--ink-2);font-size:16px;max-width:46ch}
 
-  /* sections */
-  section{padding:88px 0;border-top:1px solid var(--g5)}
-  .kicker{font-family:var(--mono);font-size:12.5px;color:var(--g3);text-transform:uppercase;letter-spacing:.12em;margin:0 0 14px}
-  h2{font-size:clamp(28px,4.4vw,44px);letter-spacing:-.035em;margin:0 0 16px;font-weight:800}
-  .lead2{color:var(--g2);max-width:60ch;margin:0 0 44px;font-size:17px}
+  /* ---- how it works: real sequence ---- */
+  .how{padding:92px 0;background:var(--ink);color:var(--paper)}
+  .how h2{font-size:clamp(28px,4vw,42px);font-weight:600;color:var(--paper);max-width:16ch}
+  .how .lede{color:#b9b9b9;margin:18px 0 52px;max-width:52ch;font-size:17px}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+  .step{padding:0 26px 0 0;position:relative}
+  .step:not(:last-child)::after{content:"";position:absolute;top:19px;right:18px;left:44px;height:1px;background:#3a3a3a}
+  .step .n{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--paper);display:grid;place-items:center;font-family:var(--disp);font-weight:600;margin-bottom:20px;position:relative;z-index:1;background:var(--ink)}
+  .step h3{font-size:18px;font-weight:600;color:var(--paper);margin-bottom:8px}
+  .step p{color:#b1b1b1;font-size:15px;margin:0}
 
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  .card{border:1px solid var(--g5);border-radius:var(--r);padding:26px;background:var(--paper);transition:transform .15s,box-shadow .15s,border-color .15s}
-  .card:hover{transform:translateY(-4px);box-shadow:0 16px 40px -20px rgba(0,0,0,.28);border-color:var(--g4)}
-  .card .ic{width:40px;height:40px;border-radius:10px;background:var(--ink);color:var(--paper);
-    display:grid;place-items:center;font-family:var(--mono);font-weight:700;margin-bottom:16px}
-  .card h3{margin:0 0 7px;font-size:17.5px;letter-spacing:-.02em}
-  .card p{margin:0;color:var(--g2);font-size:14.5px}
+  /* ---- numbers ---- */
+  .perf{padding:92px 0;border-bottom:1px solid var(--hair)}
+  .perf .head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:40px}
+  .perf h2{font-size:clamp(28px,4vw,40px)}
+  .perf .head p{color:var(--mut);margin:0;max-width:44ch;font-size:15px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--hair);border-radius:16px;overflow:hidden}
+  .stat{padding:34px 30px}
+  .stat + .stat{border-left:1px solid var(--hair)}
+  .stat .v{font-family:var(--disp);font-weight:600;font-size:clamp(32px,4.6vw,46px);letter-spacing:-0.03em}
+  .stat .v small{font-size:18px;color:var(--mut);font-weight:500}
+  .stat .k{color:var(--ink-2);margin-top:10px;font-size:15px}
 
-  /* metrics */
-  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  .metric{border:1px solid var(--g5);border-radius:var(--r);padding:30px;text-align:center}
-  .metric .big{font-family:var(--mono);font-weight:700;font-size:clamp(30px,5vw,46px);letter-spacing:-.04em;line-height:1}
-  .metric .u{font-size:17px;color:var(--g3);font-weight:700}
-  .metric .lbl{color:var(--g3);font-size:13px;margin-top:12px}
+  /* ---- install ---- */
+  .install{padding:92px 0;background:var(--wash)}
+  .install h2{font-size:clamp(28px,4vw,40px);margin-bottom:10px}
+  .install .lede{color:var(--ink-2);margin:0 0 36px;max-width:56ch}
+  .term{border-radius:14px;overflow:hidden;border:1px solid var(--hair);background:var(--ink);max-width:760px}
+  .term .bar{display:flex;align-items:center;gap:8px;padding:12px 15px;border-bottom:1px solid #2a2a2a}
+  .term .bar i{width:11px;height:11px;border-radius:50%;background:#3d3d3d;display:block}
+  .term .bar .lbl{margin-left:8px;font-family:var(--mono);font-size:12px;color:#8f8f8f}
+  .term .body{display:flex;align-items:center;gap:14px;padding:16px 18px}
+  .term code{font-family:var(--mono);font-size:14px;color:#f2f2f2;white-space:nowrap;overflow-x:auto}
+  .term .sigil{color:#7d7d7d;user-select:none}
+  .term button{margin-left:auto;font-family:var(--body);font-size:13px;font-weight:550;color:var(--ink);background:var(--paper);border:0;border-radius:8px;padding:7px 13px;cursor:pointer}
+  .term button:hover{opacity:.85}
+  .alt{margin-top:22px;font-size:15px;color:var(--ink-2)}
+  .alt code{font-family:var(--mono);font-size:13.5px;background:var(--paper);border:1px solid var(--hair);border-radius:6px;padding:2px 7px}
+  .alt .two{display:block;margin-top:10px;color:var(--mut);font-size:14px}
 
-  /* steps */
-  .steps{counter-reset:s;display:grid;gap:14px;margin:0;padding:0;list-style:none}
-  .steps li{border:1px solid var(--g5);border-radius:var(--r);padding:20px 22px 20px 64px;position:relative}
-  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:18px;top:18px;
-    width:32px;height:32px;border-radius:9px;background:var(--ink);color:var(--paper);
-    display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:14px}
-  .steps code{font-family:var(--mono);font-size:13.5px;background:var(--g6);border:1px solid var(--g5);border-radius:7px;padding:3px 9px}
-  .steps p{margin:9px 0 0;color:var(--g3);font-size:14px}
+  /* ---- roadmap ---- */
+  .road{padding:92px 0}
+  .road h2{font-size:clamp(28px,4vw,40px);margin-bottom:8px}
+  .road .lede{color:var(--mut);margin:0 0 34px}
+  .rtable{width:100%;border-collapse:collapse}
+  .rtable td{padding:16px 8px;border-top:1px solid var(--hair);vertical-align:middle;font-size:16px}
+  .rtable tr td:first-child{font-family:var(--disp);color:var(--mut);width:54px}
+  .rtable tr td:last-child{text-align:right;width:120px}
+  .pill{font-size:13px;border:1px solid var(--ink);border-radius:999px;padding:3px 12px;white-space:nowrap}
+  .pill.on{background:var(--ink);color:var(--paper)}
+  .pill.mid{border-style:dashed}
 
-  /* roadmap */
-  .road{border:1px solid var(--g5);border-radius:var(--r);overflow:hidden}
-  .road .row{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;
-    padding:15px 20px;border-top:1px solid var(--g5);font-size:15px}
-  .road .row:first-child{border-top:none;background:var(--g6);font-family:var(--mono);font-size:12.5px;color:var(--g3);text-transform:uppercase;letter-spacing:.08em}
-  .road .ph{font-family:var(--mono);color:var(--g4)}
-  .tag{font-family:var(--mono);font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--g4);color:var(--g2);white-space:nowrap}
-  .tag.done{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  footer{border-top:1px solid var(--hair);padding:44px 0 72px}
+  footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
+  footer .brand{font-size:17px}
+  footer .lic{color:var(--mut);font-size:14px}
 
-  .note{border:1px solid var(--g5);border-left:3px solid var(--ink);border-radius:12px;padding:20px 22px;color:var(--g2);font-size:15px}
-  .note b{color:var(--ink)}
-
-  footer{border-top:1px solid var(--g5);padding:40px 0 72px}
-  footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;color:var(--g3);font-size:13.5px}
-  footer .mono{font-family:var(--mono)}
-
-  @media(max-width:860px){.grid,.metrics{grid-template-columns:1fr 1fr}}
-  @media(max-width:620px){
-    .grid,.metrics{grid-template-columns:1fr}
-    nav.links a:not(.gh){display:none}
-    .hero{padding:64px 0 52px}
+  @media (max-width:880px){
+    .hero .wrap{grid-template-columns:1fr;gap:40px}
+    .link-viz{max-width:460px}
+    .feat-grid{grid-template-columns:1fr;gap:0}
+    .steps{grid-template-columns:1fr 1fr;gap:34px 26px}
+    .step:not(:last-child)::after{display:none}
+    .stats{grid-template-columns:1fr}
+    .stat + .stat{border-left:0;border-top:1px solid var(--hair)}
+  }
+  @media (max-width:560px){
+    .top nav a:not(.src){display:none}
+    .steps{grid-template-columns:1fr}
   }
 </style>
 </head>
 <body>
 
-<header class="nav">
+<header class="top">
   <div class="wrap">
-    <span class="brand"><span class="mark">L</span> laplink</span>
-    <nav class="links">
-      <a href="#features">Features</a>
-      <a href="#speed">Speed</a>
-      <a href="#start">Quickstart</a>
-      <a href="#roadmap">Roadmap</a>
-      <a class="gh" href="https://github.com/Eselase-Noble/laptoplink">GitHub</a>
+    <span class="brand">
+      <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#000"/><g stroke="#fff" stroke-width="8" fill="none"><circle cx="30" cy="50" r="11"/><circle cx="70" cy="50" r="11"/><path d="M41 50 H59"/></g></svg>
+      laplink
+    </span>
+    <nav>
+      <a href="#what">What it is</a>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a class="src" href="https://github.com/Eselase-Noble/laptoplink">Source</a>
     </nav>
   </div>
 </header>
 
-<div class="hero">
+<section class="hero">
   <div class="wrap">
-    <span class="eyebrow rise"><span class="d"></span> Open source · Rust · encrypted by default</span>
-    <h1 class="rise d1">Move files<br><span class="thin">straight across.</span></h1>
-    <p class="lead rise d2">Send files and folders directly between your own computers. Encrypted end to end, verified byte for byte, and able to resume the moment the network comes back.</p>
-    <div class="cta rise d3">
-      <a class="btn solid" href="#start">Get started</a>
-      <a class="btn ghost" href="https://github.com/Eselase-Noble/laptoplink">View on GitHub</a>
-    </div>
-    <div class="install rise d3">
-      <span class="p">$</span>
-      <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
-      <button onclick="navigator.clipboard&amp;&amp;navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(()=>{this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)})">copy</button>
+    <div>
+      <h1>A direct line between your computers.</h1>
+      <p class="sub">Send a file or a whole folder straight to another machine you own. No cloud in the middle.</p>
+      <div class="actions">
+        <a class="btn primary" href="#install">Install laplink</a>
+        <a class="btn secondary" href="https://github.com/Eselase-Noble/laptoplink">Read the source</a>
+      </div>
+      <p class="micro">Open source, written in Rust. Encrypted end to end and checked byte for byte.</p>
     </div>
 
-    <div class="term rise d4">
-      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="ttl">two computers, one command each</span></div>
-<pre><span class="c"># on the receiving machine</span>
-<span class="ok">$ laplink receive --dest ~/incoming --accept-new</span>
-
-<span class="c"># on the sending machine</span>
-<span class="ok">$ laplink send ./ubuntu.iso --to 192.168.1.50</span>
-<span class="ok">  100.0%   4.7 GiB   283.0 MiB/s   ubuntu.iso</span>
-<span class="ok">  Done: 1 file sent, verified.</span></pre>
-    </div>
-  </div>
-</div>
-
-<section id="features">
-  <div class="wrap">
-    <p class="kicker">Why it is different</p>
-    <h2>Security first, then fast</h2>
-    <p class="lead2">No home-rolled cryptography, no data held in memory, and nothing trusted until it verifies. Speed came after the guarantees, not instead of them.</p>
-    <div class="grid">
-      <div class="card"><div class="ic">01</div><h3>Encrypted &amp; authenticated</h3><p>A Noise XX handshake proves both machines by their keys, then ChaCha20-Poly1305 protects every byte. Identity is a key, never an IP address.</p></div>
-      <div class="card"><div class="ic">02</div><h3>Verified byte for byte</h3><p>Each chunk is BLAKE3-checked before it touches disk, and the whole file is checked again before it is committed with an atomic rename.</p></div>
-      <div class="card"><div class="ic">03</div><h3>Resumable</h3><p>If a transfer drops, run it again. The receiver asks only for the chunks it is still missing. Nothing that arrived is ever sent twice.</p></div>
-      <div class="card"><div class="ic">04</div><h3>Flat memory</h3><p>Everything streams. A one terabyte file uses the same memory as a one megabyte file, bounded no matter how large the transfer gets.</p></div>
-      <div class="card"><div class="ic">05</div><h3>rsync-style sync</h3><p>Keep a folder in sync, skipping what is already there. When a big file changed a little, delta transfer sends only the blocks that differ.</p></div>
-      <div class="card"><div class="ic">06</div><h3>Safe by construction</h3><p>Path traversal, absolute paths, and symlink tricks are refused. Deletion during sync is opt-in, confirmed, and only after transfers succeed.</p></div>
+    <div class="link-viz" role="img" aria-label="Animation of a file transferring from one laptop to another and arriving verified.">
+      <div class="grid-bg"></div>
+      <div class="node a"><span class="scr"></span><span class="base"></span><span class="tag">your laptop</span></div>
+      <div class="node b"><span class="scr"></span><span class="base"></span><span class="tag">the other machine</span></div>
+      <div class="channel"><span class="fill"></span></div>
+      <span class="packet" style="animation-delay:.4s"></span>
+      <span class="packet" style="animation-delay:.9s"></span>
+      <span class="packet" style="animation-delay:1.4s"></span>
+      <div class="check" aria-hidden="true">&#10003;</div>
+      <div class="viz-cap">arrived, and verified</div>
     </div>
   </div>
 </section>
 
-<section id="speed">
+<section class="statement" id="what">
   <div class="wrap">
-    <p class="kicker">Measured, not promised</p>
-    <h2>Fast on a single core</h2>
-    <p class="lead2">On a 2019 i9 laptop, 512 MiB over loopback, encrypting and double-hashing every byte. Reproduce it with the benchmark script in the repo.</p>
-    <div class="metrics">
-      <div class="metric"><div class="big">283<span class="u"> MiB/s</span></div><div class="lbl">single-threaded throughput</div></div>
-      <div class="metric"><div class="big">2.2<span class="u"> Gbit/s</span></div><div class="lbl">saturates gigabit with headroom</div></div>
-      <div class="metric"><div class="big">4.4<span class="u"> KiB</span></div><div class="lbl">to re-sync a 2 KB edit in a 20 MB file</div></div>
+    <p>It works like <span>rsync</span>, feels like <span>AirDrop</span>, and trusts <span>no one in between</span>.</p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="wrap">
+    <div class="feat-grid">
+      <div class="feat">
+        <h3>Encrypted, and it checks who's there</h3>
+        <p>Every connection is a mutually authenticated handshake, then ChaCha20-Poly1305 on the wire. A machine is known by its key, not its address, so no one can pose as a computer you trust.</p>
+      </div>
+      <div class="feat">
+        <h3>Nothing arrives corrupted</h3>
+        <p>Each chunk is hashed with BLAKE3 before it hits the disk, and the whole file is checked again before it is put in place. A bad byte never becomes a saved file.</p>
+      </div>
+      <div class="feat">
+        <h3>Pick up where it dropped</h3>
+        <p>If the network cuts out, run it again. The far side asks only for the chunks it is still missing. Nothing that already arrived moves twice.</p>
+      </div>
+      <div class="feat">
+        <h3>Terabytes without filling memory</h3>
+        <p>Everything streams. A one terabyte file uses the same memory as a one megabyte file, so the size of the job never decides whether it runs.</p>
+      </div>
+      <div class="feat">
+        <h3>Keep a folder in step</h3>
+        <p>Sync skips files that already match, and when a large file changed only a little it sends just the parts that differ. A small edit in a big file moves in kilobytes.</p>
+      </div>
+      <div class="feat">
+        <h3>Careful with your disk</h3>
+        <p>It refuses paths that try to escape the folder you chose, never follows a surprise symlink, and only deletes during a sync when you ask and confirm.</p>
+      </div>
     </div>
   </div>
 </section>
 
-<section id="start">
+<section class="how" id="how">
   <div class="wrap">
-    <p class="kicker">Up and running in a minute</p>
-    <h2>Quickstart</h2>
-    <p class="lead2">Install the binary, start a listener on one machine, send from the other. The short command is <code class="mono">laplink</code>; <code class="mono">laptoplink</code> works too.</p>
-    <ol class="steps">
-      <li><code>curl -fsSL …/install.sh | bash</code><p>Installs <code class="mono">laplink</code> for your OS, or build from source with <code class="mono">cargo build --release</code>.</p></li>
-      <li><code>laplink receive --dest ~/incoming --accept-new</code><p>On the receiving machine. It prints its address and fingerprint.</p></li>
-      <li><code>laplink send ./bigfile.iso --to 192.168.1.50</code><p>On the sending machine. Watch the live rate.</p></li>
-      <li><code>laplink sync ./project --to 192.168.1.50 --delta</code><p>Keep a folder in sync, sending only what changed.</p></li>
-    </ol>
-  </div>
-</section>
-
-<section id="roadmap">
-  <div class="wrap">
-    <p class="kicker">Honest status</p>
-    <h2>Roadmap</h2>
-    <p class="lead2">Built strictly phase by phase. Nothing is called finished without tests behind it.</p>
-    <div class="road">
-      <div class="row"><span>Phase</span><span>What</span><span>State</span></div>
-      <div class="row"><span class="ph">01</span><span>Architecture and threat model</span><span class="tag done">done</span></div>
-      <div class="row"><span class="ph">02</span><span>Secure local command-line engine</span><span class="tag done">done</span></div>
-      <div class="row"><span class="ph">03</span><span>Resume, one-way sync, delta transfer</span><span class="tag done">done</span></div>
-      <div class="row"><span class="ph">04</span><span>Desktop app (Tauri, React, TypeScript)</span><span class="tag">building</span></div>
-      <div class="row"><span class="ph">05</span><span>Internet: NAT traversal &amp; encrypted relay</span><span class="tag">planned</span></div>
-      <div class="row"><span class="ph">06</span><span>Web app (Next.js, TypeScript)</span><span class="tag">planned</span></div>
-      <div class="row"><span class="ph">07</span><span>Packaging, signing, release automation</span><span class="tag">started</span></div>
+    <h2>One command on each machine.</h2>
+    <p class="lede">The receiver listens; the sender connects straight to it. The bytes go device to device, checked the whole way, and land only once they verify.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Listen</h3>
+        <p>The receiving machine runs <code style="font-family:var(--mono);color:#e9e9e9;font-size:13px">laplink receive</code> and shows its fingerprint.</p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Trust</h3>
+        <p>Pair once by its fingerprint, so only machines you approve can connect.</p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Send</h3>
+        <p>The sender points at the address. Chunks stream across, each verified on arrival.</p>
+      </div>
+      <div class="step">
+        <div class="n">4</div>
+        <h3>Verify</h3>
+        <p>The whole file is re-checked, then moved into place in one atomic step.</p>
+      </div>
     </div>
   </div>
 </section>
 
-<section id="trust">
+<section class="perf">
   <div class="wrap">
-    <p class="kicker">No hand-waving</p>
-    <h2>Trust, spelled out</h2>
-    <div class="note">
-      <p>Machines are identified by a cryptographic key, not an IP address, so nobody can impersonate a device you trust just by taking its address. The receiver turns away unknown machines by default. For the strongest guarantee you read the short fingerprint to each other over a channel you already trust, which defeats even a machine in the middle on the first connection.</p>
-      <p style="margin-bottom:0"><b>Being honest:</b> this is local-network software today. Transfers across the internet, NAT traversal, relays, and storing keys in the OS keystore are on the roadmap, not done. The threat model in the repo lists every limitation plainly.</p>
+    <div class="head">
+      <h2>Fast enough to forget it's encrypting.</h2>
+      <p>Measured on a 2019 i9 laptop, 512 MiB over loopback, with encryption and two hashes in the hot path. Real numbers, reproducible with the benchmark in the repo.</p>
     </div>
+    <div class="stats">
+      <div class="stat"><div class="v">283<small> MiB/s</small></div><div class="k">on a single core</div></div>
+      <div class="stat"><div class="v">2.2<small> Gbit/s</small></div><div class="k">saturates gigabit with room to spare</div></div>
+      <div class="stat"><div class="v">4.4<small> KiB</small></div><div class="k">to re-sync a 2 KB edit in a 20 MB file</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="lede">The command is <strong>laplink</strong>. This pulls the latest release for your machine; no Rust toolchain needed.</p>
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i><span class="lbl">macOS &amp; Linux</span></div>
+      <div class="body">
+        <span class="sigil">$</span>
+        <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
+        <button id="copy">Copy</button>
+      </div>
+    </div>
+    <p class="alt">
+      Windows: download the <code>.zip</code> from the
+      <a href="https://github.com/Eselase-Noble/laptoplink/releases" style="border-bottom:1px solid var(--ink)">releases page</a>.
+      <span class="two">If a piped install is blocked on your network, do it in two steps:
+      <code>curl -fsSL &lt;url&gt; -o install.sh &amp;&amp; bash install.sh</code></span>
+    </p>
+  </div>
+</section>
+
+<section class="road">
+  <div class="wrap">
+    <h2>What's built, and what's next</h2>
+    <p class="lede">Shipped phase by phase. Nothing here is called done without tests behind it.</p>
+    <table class="rtable">
+      <tr><td>01</td><td>Architecture and threat model</td><td><span class="pill on">done</span></td></tr>
+      <tr><td>02</td><td>Secure local transfer engine (CLI)</td><td><span class="pill on">done</span></td></tr>
+      <tr><td>03</td><td>Resume, folder sync, delta transfer</td><td><span class="pill on">done</span></td></tr>
+      <tr><td>04</td><td>Desktop app</td><td><span class="pill mid">in progress</span></td></tr>
+      <tr><td>05</td><td>Transfers across the internet</td><td><span class="pill">next</span></td></tr>
+      <tr><td>06</td><td>Browser-based transfers</td><td><span class="pill mid">in progress</span></td></tr>
+    </table>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <span class="mono">LaptopLink · dual-licensed Apache-2.0 or MIT</span>
-    <span class="mono"><a href="https://github.com/Eselase-Noble/laptoplink">github.com/Eselase-Noble/laptoplink</a></span>
+    <span class="brand">
+      <svg width="22" height="22" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#000"/><g stroke="#fff" stroke-width="8" fill="none"><circle cx="30" cy="50" r="11"/><circle cx="70" cy="50" r="11"/><path d="M41 50 H59"/></g></svg>
+      laplink
+    </span>
+    <span class="lic">Open source, licensed Apache-2.0 or MIT. <a href="https://github.com/Eselase-Noble/laptoplink" style="border-bottom:1px solid var(--ink)">View on GitHub</a></span>
   </div>
 </footer>
 
+<script>
+  document.getElementById('copy').addEventListener('click', function(){
+    var t = document.getElementById('cmd').textContent;
+    if(navigator.clipboard){ navigator.clipboard.writeText(t).then(()=>{ this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1400); }); }
+  });
+</script>
 </body>
 </html>
