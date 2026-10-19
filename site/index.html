@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LaptopLink — secure, fast file transfer between your computers</title>
+<meta name="description" content="LaptopLink is a from-scratch, open-source tool for moving files and folders directly between your computers: encrypted, verified, resumable, and fast." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='black'/><text y='74' x='50' font-size='70' text-anchor='middle' fill='white' font-family='monospace'>L</text></svg>" />
+<style>
+  :root {
+    --ink: #000;
+    --paper: #fff;
+    --mute: #555;
+    --line: #000;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--ink); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  /* Top bar */
+  header.bar {
+    border-bottom: 2px solid var(--line);
+    position: sticky; top: 0; background: var(--paper); z-index: 10;
+  }
+  .bar .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .logo { font-family: var(--mono); font-weight: 700; letter-spacing: -0.5px; font-size: 20px; }
+  .logo b { background: var(--ink); color: var(--paper); padding: 2px 8px; }
+  nav a { font-family: var(--mono); font-size: 14px; text-decoration: none; margin-left: 22px; border-bottom: 2px solid transparent; }
+  nav a:hover { border-bottom-color: var(--ink); }
+  nav a.gh { background: var(--ink); color: var(--paper); padding: 6px 12px; }
+  nav a.gh:hover { border-bottom-color: transparent; opacity: .85; }
+
+  /* Hero */
+  .hero { padding: 84px 0 64px; border-bottom: 2px solid var(--line); }
+  .hero h1 { font-size: clamp(40px, 8vw, 86px); line-height: 1.02; margin: 0 0 20px; letter-spacing: -2px; }
+  .hero p.lead { font-size: clamp(18px, 2.4vw, 23px); max-width: 44ch; margin: 0 0 32px; color: var(--ink); }
+  .cta { display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn { font-family: var(--mono); font-size: 15px; text-decoration: none; padding: 13px 20px; border: 2px solid var(--ink); display: inline-block; }
+  .btn.solid { background: var(--ink); color: var(--paper); }
+  .btn.ghost { background: var(--paper); color: var(--ink); }
+  .btn:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
+  .btn.solid:hover { box-shadow: 4px 4px 0 var(--mute); }
+
+  /* Terminal block */
+  .term { margin-top: 44px; border: 2px solid var(--ink); background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 14px; }
+  .term .top { display: flex; gap: 8px; padding: 10px 14px; border-bottom: 2px solid var(--paper); }
+  .term .dot { width: 12px; height: 12px; border: 2px solid var(--paper); border-radius: 50%; }
+  .term pre { margin: 0; padding: 18px 16px; overflow-x: auto; line-height: 1.7; }
+  .term .c { color: #fff; opacity: .55; }
+  .term .o { color: #fff; }
+
+  section { padding: 64px 0; border-bottom: 2px solid var(--line); }
+  section h2 { font-size: clamp(26px, 4vw, 36px); margin: 0 0 8px; letter-spacing: -1px; }
+  section .sub { color: var(--mute); margin: 0 0 36px; font-family: var(--mono); font-size: 14px; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border: 2px solid var(--ink); }
+  .grid .cell { padding: 26px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+  .grid .cell:nth-child(2n) { border-right: none; }
+  .grid .cell h3 { margin: 0 0 8px; font-size: 18px; font-family: var(--mono); }
+  .grid .cell p { margin: 0; color: var(--mute); font-size: 15px; }
+  .grid .cell .n { font-family: var(--mono); font-weight: 700; font-size: 13px; display: inline-block; background: var(--ink); color: var(--paper); padding: 1px 7px; margin-bottom: 12px; }
+
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+  ol.steps li { position: relative; padding: 0 0 26px 52px; }
+  ol.steps li::before {
+    counter-increment: s; content: counter(s);
+    position: absolute; left: 0; top: 0; width: 34px; height: 34px;
+    border: 2px solid var(--ink); display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700;
+  }
+  ol.steps code { font-family: var(--mono); background: var(--ink); color: var(--paper); padding: 2px 7px; font-size: 14px; }
+  ol.steps p { margin: 6px 0 0; color: var(--mute); }
+
+  table.road { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.road th, table.road td { text-align: left; padding: 12px 14px; border-bottom: 2px solid var(--ink); }
+  table.road th { font-family: var(--mono); }
+  table.road td.state { font-family: var(--mono); white-space: nowrap; }
+  .pill { border: 2px solid var(--ink); padding: 1px 8px; font-size: 13px; }
+  .pill.done { background: var(--ink); color: var(--paper); }
+
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 2px solid var(--ink); }
+  .metrics div { padding: 26px; text-align: center; border-right: 2px solid var(--ink); }
+  .metrics div:last-child { border-right: none; }
+  .metrics .big { font-family: var(--mono); font-size: clamp(26px, 4vw, 40px); font-weight: 700; letter-spacing: -1px; }
+  .metrics .lbl { color: var(--mute); font-size: 13px; }
+
+  .note { border: 2px solid var(--ink); padding: 16px 18px; font-size: 14px; color: var(--mute); }
+  .note b { color: var(--ink); }
+
+  footer { padding: 48px 0 80px; }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 13px; color: var(--mute); }
+  footer a { color: var(--ink); }
+
+  @media (max-width: 680px) {
+    .grid, .metrics { grid-template-columns: 1fr; }
+    .grid .cell { border-right: none; }
+    .metrics div { border-right: none; border-bottom: 2px solid var(--ink); }
+    .metrics div:last-child { border-bottom: none; }
+    nav a:not(.gh) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <span class="logo"><b>L</b>&nbsp;laptoplink</span>
+    <nav>
+      <a href="#features">features</a>
+      <a href="#start">quickstart</a>
+      <a href="#roadmap">roadmap</a>
+      <a class="gh" href="https://github.com/Eselase-Noble/laptoplink">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <h1>Move files<br>straight across.</h1>
+    <p class="lead">A from-scratch tool for sending files and folders directly between your own computers. Encrypted end to end, verified byte for byte, and able to resume when the network blinks.</p>
+    <div class="cta">
+      <a class="btn solid" href="https://github.com/Eselase-Noble/laptoplink">Get the code</a>
+      <a class="btn ghost" href="#start">Quickstart</a>
+    </div>
+
+    <div class="term" aria-hidden="true">
+      <div class="top"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="c"># on the receiving machine</span>
+<span class="o">$ laptoplink receive --dest ~/incoming --accept-new</span>
+
+<span class="c"># on the sending machine</span>
+<span class="o">$ laptoplink send ./ubuntu.iso --to 192.168.1.50</span>
+<span class="o">  100.0%   4.7 GiB   283.0 MiB/s   ubuntu.iso</span>
+<span class="o">  Done: 1 file(s), 4.7 GiB sent, verified.</span></pre>
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Built security-first, then made fast</h2>
+    <p class="sub">// no home-rolled crypto, no data held in memory, nothing trusted until it verifies</p>
+    <div class="grid">
+      <div class="cell">
+        <span class="n">01</span>
+        <h3>Encrypted &amp; authenticated</h3>
+        <p>A Noise XX handshake proves both machines by their keys, then ChaCha20-Poly1305 protects every byte. Identity is a key, never an IP address.</p>
+      </div>
+      <div class="cell">
+        <span class="n">02</span>
+        <h3>Verified byte for byte</h3>
+        <p>Every chunk is BLAKE3-checked before it touches disk, and the whole file is checked again before it is committed with an atomic rename.</p>
+      </div>
+      <div class="cell">
+        <span class="n">03</span>
+        <h3>Resumable</h3>
+        <p>If a transfer drops, run it again. The receiver asks only for the chunks it is still missing. Nothing that already arrived is sent twice.</p>
+      </div>
+      <div class="cell">
+        <span class="n">04</span>
+        <h3>Flat memory</h3>
+        <p>Everything streams. A one terabyte file uses the same memory as a one megabyte file, bounded no matter how large the transfer gets.</p>
+      </div>
+      <div class="cell">
+        <span class="n">05</span>
+        <h3>rsync-style sync</h3>
+        <p>Keep a folder in sync, skipping files already there. When a big file changed a little, delta transfer sends only the blocks that differ.</p>
+      </div>
+      <div class="cell">
+        <span class="n">06</span>
+        <h3>Safe by construction</h3>
+        <p>Path traversal, absolute paths, and symlink tricks are refused. Deletion during sync is opt-in, confirmed, and only after transfers succeed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="speed">
+  <div class="wrap">
+    <h2>Fast on one core</h2>
+    <p class="sub">// measured on a 2019 i9, 512 MiB over loopback, encrypting and double-hashing every byte</p>
+    <div class="metrics">
+      <div><div class="big">283<span style="font-size:16px"> MiB/s</span></div><div class="lbl">single-threaded throughput</div></div>
+      <div><div class="big">~2.2<span style="font-size:16px"> Gbit/s</span></div><div class="lbl">saturates gigabit with headroom</div></div>
+      <div><div class="big">4.4<span style="font-size:16px"> KiB</span></div><div class="lbl">to re-sync a 2 KB edit in a 20 MB file</div></div>
+    </div>
+    <p class="sub" style="margin-top:18px">These are real measurements, not promises. Reproduce them with the benchmark script in the repo. Your numbers depend on your CPU, disk, and link.</p>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Quickstart</h2>
+    <p class="sub">// you need a Rust toolchain, 1.80 or newer</p>
+    <ol class="steps">
+      <li>
+        <code>git clone https://github.com/Eselase-Noble/laptoplink.git &amp;&amp; cd laptoplink</code>
+        <p>Grab the source.</p>
+      </li>
+      <li>
+        <code>cargo build --release</code>
+        <p>The binary lands at <code style="background:none;color:var(--mute);padding:0">target/release/laptoplink</code>. Builds on Linux, macOS, and Windows.</p>
+      </li>
+      <li>
+        <code>laptoplink receive --dest ~/incoming --accept-new</code>
+        <p>On the receiving machine. It prints its address and fingerprint.</p>
+      </li>
+      <li>
+        <code>laptoplink send ./bigfile.iso --to 192.168.1.50</code>
+        <p>On the sending machine. Watch the live rate, then find the verified file waiting on the other side.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="wrap">
+    <h2>Roadmap</h2>
+    <p class="sub">// honest status, phase by phase</p>
+    <table class="road">
+      <tr><th>Phase</th><th>What</th><th>State</th></tr>
+      <tr><td>1</td><td>Architecture and threat model</td><td class="state"><span class="pill done">done</span></td></tr>
+      <tr><td>2</td><td>Secure local command-line engine</td><td class="state"><span class="pill done">done</span></td></tr>
+      <tr><td>3</td><td>Resume, one-way sync, delta transfer</td><td class="state"><span class="pill done">done</span></td></tr>
+      <tr><td>4</td><td>Desktop app (Tauri, React, TypeScript)</td><td class="state"><span class="pill">planned</span></td></tr>
+      <tr><td>5</td><td>Internet: NAT traversal and encrypted relay</td><td class="state"><span class="pill">planned</span></td></tr>
+      <tr><td>6</td><td>Web app (Next.js, TypeScript)</td><td class="state"><span class="pill">planned</span></td></tr>
+      <tr><td>7</td><td>Packaging, signing, release automation</td><td class="state"><span class="pill">started</span></td></tr>
+    </table>
+    <p class="sub" style="margin-top:20px">Nothing is called finished unless there are tests behind it. The full feature-by-feature status lives in the repository.</p>
+  </div>
+</section>
+
+<section id="trust">
+  <div class="wrap">
+    <h2>Trust, spelled out</h2>
+    <p class="sub">// pairing is explicit, and the threat model says what is not yet protected</p>
+    <div class="note">
+      <p>Machines are identified by a cryptographic key, not an IP address, so nobody can impersonate a device you trust just by taking its address. The receiver turns away unknown machines by default. For the strongest guarantee you read the short fingerprint to each other over a channel you already trust and pair it by hand, which defeats even a machine in the middle on the first connection.</p>
+      <p style="margin-bottom:0"><b>Being honest:</b> this is local-network software today. Transfers across the internet, NAT traversal, relays, and storing keys in the OS keystore are on the roadmap, not done. The threat model in the repo lists every limitation plainly.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>LaptopLink. Dual-licensed Apache-2.0 or MIT.</span>
+    <span><a href="https://github.com/Eselase-Noble/laptoplink">github.com/Eselase-Noble/laptoplink</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
