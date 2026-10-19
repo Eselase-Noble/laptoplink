@@ -162,6 +162,50 @@
   .dl-script summary{cursor:pointer;font-size:15px;color:var(--ink-2)}
   .dl-script summary:hover{color:var(--ink)}
 
+  /* ---- desktop showcase ---- */
+  .showcase{padding:88px 0;border-top:1px solid var(--hair)}
+  .showcase .two{display:grid;grid-template-columns:1fr 1.35fr;gap:48px;align-items:center}
+  .showcase h2{font-size:clamp(28px,4vw,42px);letter-spacing:-.03em;margin:0 0 16px}
+  .showcase p{color:var(--ink-2);font-size:17px;margin:0 0 18px;max-width:46ch}
+  .showcase ul{margin:0 0 26px;padding:0;list-style:none}
+  .showcase li{padding:7px 0 7px 26px;position:relative;color:var(--ink-2);font-size:15.5px}
+  .showcase li::before{content:"";position:absolute;left:0;top:14px;width:12px;height:2px;background:var(--ink)}
+
+  .appwin{border:1px solid var(--hair);border-radius:14px;overflow:hidden;background:var(--paper);
+    box-shadow:0 34px 80px -34px rgba(0,0,0,.4)}
+  .appwin .tb{display:flex;align-items:center;gap:7px;padding:11px 13px;background:var(--wash);border-bottom:1px solid var(--hair)}
+  .appwin .tb i{width:11px;height:11px;border-radius:50%;background:#d2d2d2}
+  .appwin .tb span{margin-left:9px;font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .ab{display:grid;grid-template-columns:1fr 210px}
+  .ab .main{padding:16px 16px}
+  .ab .bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .ab .logo{display:flex;align-items:center;gap:8px;font-family:var(--disp);font-weight:600;font-size:15px}
+  .ab .logo b{width:22px;height:22px;border-radius:6px;background:var(--ink);color:#fff;display:grid;place-items:center;font-family:var(--mono);font-size:13px}
+  .ab .fp{font-family:var(--mono);font-size:11px;color:var(--mut)}
+  .ab .tabs2{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-bottom:16px}
+  .ab .tabs2 b{font-size:13px;font-weight:550;color:var(--mut);padding:6px 10px 10px;border-bottom:2px solid transparent}
+  .ab .tabs2 b.on{color:var(--ink);border-bottom-color:var(--ink)}
+  .ab .drop{border:1.5px dashed var(--hair);border-radius:11px;padding:22px;text-align:center}
+  .ab .drop .t{font-family:var(--disp);font-weight:600;font-size:15px}
+  .ab .drop .s{font-size:12.5px;color:var(--mut);margin-top:4px}
+  .ab .chips{display:flex;gap:7px;margin:12px 0}
+  .ab .chip{border:1px solid var(--hair);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:11px}
+  .ab .inp{border:1px solid var(--hair);border-radius:9px;padding:10px 12px;font-family:var(--mono);font-size:12.5px;color:var(--mut);margin-bottom:12px}
+  .ab .go{display:inline-block;background:var(--ink);color:#fff;border-radius:9px;padding:9px 18px;font-size:13.5px;font-weight:550}
+  .ab .side{border-left:1px solid var(--hair);background:var(--wash);padding:14px}
+  .ab .rail{display:flex;align-items:center;gap:7px;margin-bottom:14px}
+  .ab .rail .n{width:15px;height:15px;border-radius:5px;border:2px solid var(--ink)}
+  .ab .rail .n.f{background:var(--ink)}
+  .ab .rail .w{flex:1;height:2px;background:var(--hair);position:relative;overflow:hidden}
+  .ab .rail .w::after{content:"";position:absolute;top:-2px;width:6px;height:6px;background:var(--ink);border-radius:2px;transform:rotate(45deg);animation:scwd 1.2s linear infinite}
+  @keyframes scwd{0%{left:-6px}100%{left:100%}}
+  .ab .rl{font-family:var(--mono);font-size:10.5px;color:var(--mut)}
+  .ab .trk{height:7px;background:#e4e4e4;border-radius:99px;overflow:hidden;margin:6px 0}
+  .ab .trk i{display:block;height:100%;width:62%;background:var(--ink)}
+  .ab .lg{font-family:var(--mono);font-size:10.5px;color:#555;line-height:1.7;margin-top:12px}
+  @media (prefers-reduced-motion:reduce){ .ab .rail .w::after{animation:none;left:46%} }
+  @media (max-width:860px){ .showcase .two{grid-template-columns:1fr;gap:30px} }
+
   /* ---- using it ---- */
   .use{padding:92px 0;border-bottom:1px solid var(--hair)}
   .use h2{font-size:clamp(28px,4vw,40px);margin-bottom:10px}
@@ -219,6 +263,7 @@
     </span>
     <nav>
       <a href="#what">What it is</a>
+      <a href="#desktop">Desktop</a>
       <a href="#how">How it works</a>
       <a href="#use">Commands</a>
       <a href="#download">Download</a>
@@ -285,6 +330,50 @@
       <div class="feat">
         <h3>Careful with your disk</h3>
         <p>It refuses paths that try to escape the folder you chose, never follows a surprise symlink, and only deletes during a sync when you ask and confirm.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="showcase" id="desktop">
+  <div class="wrap">
+    <div class="two">
+      <div>
+        <p class="kicker">Not a terminal person?</p>
+        <h2>There's a desktop app.</h2>
+        <p>The same engine, in a window. Drag a file in, pick who it goes to, watch it land. No commands to remember.</p>
+        <ul>
+          <li>Drag-and-drop, or send to several devices at once</li>
+          <li>Receive with one click, approve new devices as they pair</li>
+          <li>Folder sync with a preview before anything changes</li>
+          <li>Manage paired devices and your fingerprint</li>
+        </ul>
+        <a class="btn primary" href="#download">Download the app</a>
+      </div>
+
+      <!-- Faithful render of the app's Send view, mid-transfer. -->
+      <div class="appwin" role="img" aria-label="LaptopLink desktop app, Send tab, a transfer in progress.">
+        <div class="tb"><i></i><i></i><i></i><span>LaptopLink</span></div>
+        <div class="ab">
+          <div class="main">
+            <div class="bar">
+              <span class="logo"><b>L</b> laplink</span>
+              <span class="fp">this-mac · 8624b3aec66be4fc</span>
+            </div>
+            <div class="tabs2"><b class="on">Send</b><b>Receive</b><b>Sync</b><b>Devices</b></div>
+            <div class="drop"><div class="t">Drop files here</div><div class="s">or click to choose files · choose a folder</div></div>
+            <div class="chips"><span class="chip">ubuntu.iso</span><span class="chip">photos/</span></div>
+            <div class="inp">192.168.1.50</div>
+            <span class="go">Send</span>
+          </div>
+          <div class="side">
+            <div class="rail"><span class="n f"></span><span class="w"></span><span class="n"></span></div>
+            <div class="rl">sending…</div>
+            <div class="trk"><i></i></div>
+            <div class="rl">2.9 GiB / 4.7 GiB</div>
+            <div class="lg">↑ sent notes.txt<br>↓ paired work-laptop<br>· listening on 0.0.0.0:9031</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
