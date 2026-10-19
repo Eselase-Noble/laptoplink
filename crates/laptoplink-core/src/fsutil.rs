@@ -22,6 +22,10 @@ pub fn write_private_file(path: &Path, data: &[u8]) -> Result<()> {
     let mut f = opts.open(path)?;
     f.write_all(data)?;
     f.flush()?;
+    // Make it durable on the write handle. (Do NOT reopen read-only to fsync:
+    // on Windows, FlushFileBuffers on a read-only handle fails with
+    // ERROR_ACCESS_DENIED.)
+    f.sync_all()?;
     Ok(())
 }
 

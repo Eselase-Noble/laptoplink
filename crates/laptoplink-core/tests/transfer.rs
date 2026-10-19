@@ -3,14 +3,9 @@
 //! Each test stands up a real receiver on an ephemeral loopback port and runs
 //! a real sender against it over the encrypted Noise transport, no mocks.
 //!
-//! Gated off Windows. These drive sender and receiver in a single process over
-//! loopback; on Windows that arrangement intermittently hits an abortive
-//! socket reset at teardown and an antivirus/indexer "Access is denied" on the
-//! finalize rename. The graceful close + rename retry make it usually pass, but
-//! not reliably, and it cannot be reproduced/iterated without a real Windows
-//! host. Windows build + unit tests still run in CI; end-to-end transfer on
-//! Windows is tracked as not-yet-validated in docs/FEATURES.md.
-#![cfg(not(windows))]
+//! Runs on all platforms, including Windows. (The concurrent-receive test is
+//! the one exception: it leaks a serve thread over loopback in a single
+//! process and stays gated off Windows.)
 
 use laptoplink_core::chunk;
 use laptoplink_core::config::Config;

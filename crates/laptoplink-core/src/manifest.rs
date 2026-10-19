@@ -133,12 +133,8 @@ impl ReceiverManifest {
         }
         let tmp = self.path.with_extension("json.tmp");
         let data = serde_json::to_vec_pretty(self)?;
+        // write_private_file fsyncs on its write handle (durable before rename).
         fsutil::write_private_file(&tmp, &data)?;
-        {
-            // Ensure the temp file's bytes are durable before the rename.
-            let f = std::fs::File::open(&tmp)?;
-            fsutil::sync_file(&f)?;
-        }
         fsutil::atomic_rename(&tmp, &self.path)?;
         Ok(())
     }
