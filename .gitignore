@@ -1,0 +1,28 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# We DO commit Cargo.lock for the binary crates (reproducible builds).
+# (No ignore entry for Cargo.lock on purpose.)
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local test artifacts
+/tmp
+*.part
+benchmark-results-local/
+
+# Node / web (Phase 6)
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+
+# Secrets — never commit identities or keys
+identity.json
+peers.json

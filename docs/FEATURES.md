@@ -1,0 +1,92 @@
+# Implemented vs. Remaining
+
+An honest status of LaptopLink against the full specification. The project is
+built phase by phase; this is the ground truth as of the current commit.
+
+Legend: ✅ done & tested · 🟡 partial · ⬜ not started
+
+## Phase 1 — Architecture & threat model ✅
+- ✅ System architecture ([ARCHITECTURE.md](ARCHITECTURE.md))
+- ✅ Network protocol spec ([PROTOCOL.md](PROTOCOL.md))
+- ✅ Security/threat model ([THREAT_MODEL.md](THREAT_MODEL.md))
+- ✅ Transfer manifest format ([manifest.rs](../crates/laptoplink-core/src/manifest.rs))
+- ✅ Chunking strategy ([chunk.rs](../crates/laptoplink-core/src/chunk.rs))
+- ✅ Resume algorithm (receiver bitmap + signature) 
+- ✅ Filesystem safety rules ([pathsafety.rs](../crates/laptoplink-core/src/pathsafety.rs))
+- ✅ Benchmarking methodology ([BENCHMARKING.md](BENCHMARKING.md))
+- ✅ Repository structure
+- 🟡 Delta-transfer design — documented as design; not yet implemented (Phase 3)
+
+## Phase 2 — High-performance local CLI engine ✅ (core milestone)
+- ✅ Cryptographic device identity (X25519 static keys, BLAKE3 fingerprint)
+- ✅ Secure pairing with explicit receiver approval (+ TOFU `--accept-new`)
+- ✅ Device revocation
+- ✅ Mutually-authenticated, encrypted transport (Noise `XX` / ChaChaPoly)
+- ✅ Streaming with bounded memory (one chunk in flight)
+- ✅ Chunked transfer with per-chunk BLAKE3 verification
+- ✅ Whole-file BLAKE3 verification before commit
+- ✅ Atomic finalize (temp `.part` → fsync → rename), symlink-overwrite guard
+- ✅ Path-traversal / absolute-path / prefix defenses
+- ✅ Resource limits (files, chunks, message/chunk sizes, in-flight bytes)
+- ✅ Durable manifests + crash-safe atomic manifest writes
+- ✅ Resume: skip completed files; send only missing chunks (tested)
+- ✅ Directory-tree transfer (structure preserved, no symlink following)
+- ✅ Progress reporting (human live line + `--json` events)
+- ✅ Stable exit codes, `--quiet`, `--verbose`, configurable chunk size
+- ✅ CLI: `device {show,list,pair,revoke}`, `send`, `receive`,
+      `transfer {list,status,resume,cancel}`, `benchmark`, `doctor`
+- ✅ Real two-process transfers + SHA-256-verified integration tests
+- 🟡 64-bit offsets & overflow-checked arithmetic — used throughout; more
+      property tests wanted
+- ⬜ mDNS/DNS-SD local discovery (manual addressing works today)
+- ⬜ Concurrent inbound transfers (sequential today)
+- ⬜ Parallel per-chunk / multi-connection send; adaptive concurrency
+- ⬜ Bandwidth rate-limiting flag
+- ⬜ Exclusion/inclusion patterns on send
+
+## Phase 3 — Resume, sync & delta 🟡
+- ✅ Persistent manifests & verified-chunk reuse (from Phase 2)
+- 🟡 One-way directory sync — basic "skip identical / resume" exists; full sync
+     (metadata compare, dry-run, exclude patterns, safe deletion) not yet
+- ⬜ Dry-run mode (`sync --dry-run`)
+- ⬜ Safe deletion policy (`sync --delete` with confirmation)
+- ⬜ Rolling-checksum + strong-hash delta transfer for modified files
+- ⬜ Conflict detection
+- ⬜ Published comparisons vs rsync under equal settings
+
+## Phase 4 — Desktop app (Tauri + React/TS) ⬜
+- ⬜ Tauri shell wrapping the core `Engine`
+- ⬜ Drag-and-drop, device management, incoming approval, live progress
+- ⬜ Pause/resume/retry/cancel, history, settings, disk-space warnings
+- ⬜ Direct-vs-relayed connection indicator
+
+## Phase 5 — Internet networking ⬜
+- ⬜ Secure signaling service (coordination separate from data)
+- ⬜ NAT traversal (ICE/STUN/TURN or equivalent)
+- ⬜ Encrypted relay fallback that cannot decrypt E2E content
+- ⬜ QUIC vs TCP/TLS evaluation under representative workloads
+- ⬜ Reconnection & resume across network failures
+- ⬜ Network diagnostics in `doctor`
+
+## Phase 6 — Web interface (Next.js + TS) ⬜
+- ⬜ Next.js/TypeScript frontend
+- ⬜ Backend for signaling, registration, authorization
+- ⬜ Browser streaming transfers with documented per-browser limits & fallbacks
+
+## Phase 7 — Production hardening 🟡
+- ✅ Cross-platform CI (fmt + clippy + test on Linux/macOS/Windows)
+- ✅ Benchmark scripts + demo script
+- ✅ Architecture, protocol, threat-model, troubleshooting docs
+- 🟡 Packaging/release — binaries build in release; installers/signing pending
+- ⬜ OS keystore integration for private keys (file `0o600` today)
+- ⬜ Fuzzing of protocol/manifest/path parsers; property-based tests
+- ⬜ Rate-limiting of unauthenticated handshakes
+- ⬜ Temp-file retention/cleanup policy
+- ⬜ Signed release artifacts & SBOM
+
+## Known limitations (today)
+- Local network only; no NAT traversal or relay yet.
+- Receiver handles one connection at a time.
+- Private keys are file-based (`0o600`), not in the OS keystore.
+- No bandwidth throttling or send-side include/exclude filters.
+- Delta transfer and two-way sync are designed but not implemented.

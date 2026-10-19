@@ -1,0 +1,21 @@
+[package]
+name = "laptoplink-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "LaptopLink command-line interface."
+
+[[bin]]
+name = "laptoplink"
+path = "src/main.rs"
+
+[dependencies]
+laptoplink-core = { path = "../laptoplink-core" }
+clap.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+rand.workspace = true
