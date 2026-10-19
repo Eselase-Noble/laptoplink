@@ -50,21 +50,32 @@ What is not here yet: transfers across the internet, NAT traversal, relays, the
 desktop and web apps, and two way sync. Those are designed and scheduled, not
 written. Again, the full status lives in `docs/FEATURES.md`.
 
-## Build it
+## Install
 
-You need a recent Rust toolchain, 1.80 or newer.
+The short command is `laplink`. The longer `laptoplink` is kept as an alias, so
+either name works everywhere.
+
+The quickest way, with no Rust toolchain, is the install script. It grabs the
+latest prebuilt release for your OS and architecture:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash
+```
+
+On Windows, download the `.zip` from the
+[Releases page](https://github.com/Eselase-Noble/laptoplink/releases) and put
+`laplink.exe` somewhere on your PATH.
+
+### Or build from source
+
+You need a Rust toolchain, 1.80 or newer.
 
 ```bash
 git clone https://github.com/Eselase-Noble/laptoplink.git
 cd laptoplink
 cargo build --release
-# the binary lands at target/release/laptoplink
-```
-
-To put it on your PATH on macOS or Linux:
-
-```bash
-install -m 0755 target/release/laptoplink /usr/local/bin/
+# binaries land at target/release/laplink and target/release/laptoplink
+install -m 0755 target/release/laplink target/release/laptoplink /usr/local/bin/
 ```
 
 It builds and is tested on Linux, macOS, and Windows. The CI workflow runs the

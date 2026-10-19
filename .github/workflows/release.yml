@@ -1,0 +1,77 @@
+name: Release binaries
+
+# Cutting a tag like `v0.1.0` builds prebuilt `laplink` + `laptoplink` binaries
+# for Linux, macOS (Intel + Apple Silicon), and Windows, and attaches them to a
+# GitHub Release so people can install without a Rust toolchain.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p laptoplink-cli
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          name="laplink-${tag}-${{ matrix.target }}"
+          out="dist/${name}"
+          mkdir -p "$out"
+          bindir="target/${{ matrix.target }}/release"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp "$bindir/laplink.exe" "$bindir/laptoplink.exe" "$out/"
+          else
+            cp "$bindir/laplink" "$bindir/laptoplink" "$out/"
+          fi
+          cp README.md LICENSE-MIT LICENSE-APACHE "$out/"
+          cd dist
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a "${name}.zip" "$name" >/dev/null
+            echo "ASSET=dist/${name}.zip" >> "$GITHUB_ENV"
+          else
+            tar -czf "${name}.tar.gz" "$name"
+            echo "ASSET=dist/${name}.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET }}
+          generate_release_notes: true

@@ -209,7 +209,8 @@ struct BenchArgs {
     chunk_size: Option<u32>,
 }
 
-fn main() {
+/// Shared entry point for both the `laplink` and `laptoplink` binaries.
+pub fn run_main() {
     let cli = Cli::parse();
     let code = match run(&cli) {
         Ok(()) => 0,

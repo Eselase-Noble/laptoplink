@@ -7,9 +7,11 @@ rust-version.workspace = true
 repository.workspace = true
 description = "LaptopLink command-line interface."
 
-[[bin]]
-name = "laptoplink"
-path = "src/main.rs"
+# The CLI logic lives in a library so both the short `laplink` command and the
+# `laptoplink` alias (src/bin/*.rs) can share one implementation.
+[lib]
+name = "laptoplink_cli"
+path = "src/lib.rs"
 
 [dependencies]
 laptoplink-core = { path = "../laptoplink-core" }
