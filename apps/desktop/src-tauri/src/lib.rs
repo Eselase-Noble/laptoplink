@@ -7,7 +7,7 @@
 use laptoplink_core::config::Config;
 use laptoplink_core::identity::{DeviceIdentity, Fingerprint};
 use laptoplink_core::progress::{ProgressEvent, ProgressSink};
-use laptoplink_core::{recv, send};
+use laptoplink_core::{recv, send, sync};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -120,6 +120,78 @@ fn pair_peer(state: State<'_, AppState>, fingerprint: String, name: String) -> R
     peers.approve(&fp, &name).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn revoke_peer(state: State<'_, AppState>, fingerprint: String) -> Result<bool, String> {
+    let fp = Fingerprint::from_str(&fingerprint).map_err(|e| e.to_string())?;
+    let mut peers = state.config.load_peers().map_err(|e| e.to_string())?;
+    peers.revoke(&fp).map_err(|e| e.to_string())
+}
+
+/// Result of a sync, returned to the UI.
+#[derive(Serialize, Clone)]
+struct SyncResultInfo {
+    dry_run: bool,
+    files_total: u64,
+    files_transferred: u64,
+    files_skipped: u64,
+    bytes_transferred: u64,
+    deletions: Vec<String>,
+    deleted: u64,
+    conflicts: Vec<String>,
+}
+
+/// One-way sync a folder to a device. Runs off the UI thread; streams progress
+/// on `ll://progress`; resolves with a summary.
+#[tauri::command]
+async fn run_sync(
+    app: AppHandle,
+    source: String,
+    addr: String,
+    delete: bool,
+    dry_run: bool,
+    delta: bool,
+    checksum: bool,
+) -> Result<SyncResultInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let target = if addr.contains(':') {
+            addr.clone()
+        } else {
+            format!("{addr}:9031")
+        };
+        let mut sink = EventSink { app: app.clone() };
+        let s = sync::sync(
+            &state.config,
+            &state.identity,
+            &target,
+            std::path::Path::new(&source),
+            sync::SyncOptions {
+                delete,
+                dry_run,
+                checksum,
+                delta,
+                excludes: vec![],
+                chunk_size: None,
+                device_name: state.identity.name.clone(),
+            },
+            &mut sink,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(SyncResultInfo {
+            dry_run: s.dry_run,
+            files_total: s.files_total,
+            files_transferred: s.files_transferred,
+            files_skipped: s.files_skipped,
+            bytes_transferred: s.bytes_transferred,
+            deletions: s.deletions,
+            deleted: s.deleted,
+            conflicts: s.conflicts,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Start the receive server on a background thread. It runs until the app
 /// exits. Progress and pairing notes arrive on `ll://progress`.
 #[tauri::command]
@@ -225,8 +297,10 @@ pub fn run() {
             my_identity,
             list_peers,
             pair_peer,
+            revoke_peer,
             start_receiver,
-            send_files
+            send_files,
+            run_sync
         ])
         .run(tauri::generate_context!())
         .expect("error while running LaptopLink");

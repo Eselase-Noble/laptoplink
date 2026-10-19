@@ -1,6 +1,6 @@
 [package]
 name = "laptoplink-desktop"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "LaptopLink desktop app (Tauri)."
 license = "MIT OR Apache-2.0"

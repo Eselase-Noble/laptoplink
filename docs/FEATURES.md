@@ -64,11 +64,17 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 - ⬜ Delta fallback heuristic when delta would send more than a full transfer
       (today delta is opt-in per run and gated by a minimum file size)
 
-## Phase 4 — Desktop app (Tauri + React/TS) ⬜
-- ⬜ Tauri shell wrapping the core `Engine`
-- ⬜ Drag-and-drop, device management, incoming approval, live progress
-- ⬜ Pause/resume/retry/cancel, history, settings, disk-space warnings
-- ⬜ Direct-vs-relayed connection indicator
+## Phase 4 — Desktop app (Tauri v2 + React/TS) ✅ (core)
+- ✅ Tauri shell wrapping the shared `laptoplink-core` engine (no logic in the UI)
+- ✅ Send: file/folder pickers, drag-and-drop, multiple target devices
+- ✅ Receive: destination picker, pairing mode, allow-sender-dest, concurrent
+- ✅ Sync: source + target, dry-run / delta / checksum / delete
+- ✅ Devices: your fingerprint (copy), pair by fingerprint, revoke, list
+- ✅ Live progress, activity log, transfer animations, toasts
+- ✅ Native installers for macOS/Windows/Linux (dmg, exe/msi, deb/rpm/AppImage)
+- ⬜ In-app pause/retry/cancel and a stop-receiving button
+- ⬜ Settings persistence (default dest, port), disk-space warnings
+- ⬜ Direct-vs-relayed indicator (needs Phase 5)
 
 ## Phase 5 — Internet networking ⬜
 - ⬜ Secure signaling service (coordination separate from data)

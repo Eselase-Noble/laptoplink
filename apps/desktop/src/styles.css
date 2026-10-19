@@ -42,19 +42,24 @@ body {
 .me-name { font-size: 13px; font-weight: 500; }
 .me-fp { font-family: var(--mono); font-size: 11.5px; color: var(--mut); }
 
-/* tabs with sliding ink */
-.tabs { display: flex; gap: 2px; padding: 14px 20px 0; position: relative; }
+/* tabs */
+.tabs { display: flex; gap: 4px; padding: 14px 20px 0; border-bottom: 1px solid var(--hair); }
 .tabs button {
   font-family: var(--sans); font-size: 14.5px; font-weight: 550; color: var(--mut);
-  background: none; border: 0; padding: 8px 14px 14px; cursor: pointer; transition: color .15s;
+  background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  padding: 8px 12px 12px; cursor: pointer; transition: color .15s, border-color .15s;
 }
-.tabs button.on { color: var(--ink); }
-.tab-ink {
-  position: absolute; bottom: 0; height: 2px; width: 60px; background: var(--ink);
-  transition: transform .28s cubic-bezier(.65,0,.35,1);
-}
-.tab-ink.send { transform: translateX(20px); }
-.tab-ink.receive { transform: translateX(95px); }
+.tabs button:hover { color: var(--ink2); }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* sync options */
+.opts { display: flex; flex-direction: column; gap: 11px; }
+
+/* device rows */
+.peer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--hair); }
+.peer-name { font-size: 14px; font-weight: 500; }
+.peer-row code { font-family: var(--mono); font-size: 11.5px; color: var(--mut); }
+.revoked { color: var(--mut); font-weight: 400; font-size: 12px; }
 
 .panel { display: grid; grid-template-columns: 1fr 300px; flex: 1; min-height: 0; }
 .col {
