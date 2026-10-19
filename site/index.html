@@ -148,6 +148,21 @@
   .alt code{font-family:var(--mono);font-size:13.5px;background:var(--paper);border:1px solid var(--hair);border-radius:6px;padding:2px 7px}
   .alt .two{display:block;margin-top:10px;color:var(--mut);font-size:14px}
 
+  /* ---- using it ---- */
+  .use{padding:92px 0;border-bottom:1px solid var(--hair)}
+  .use h2{font-size:clamp(28px,4vw,40px);margin-bottom:10px}
+  .use .lede{color:var(--ink-2);margin:0 0 40px;max-width:58ch}
+  .cmd{margin:0 0 30px}
+  .cmd-label{font-family:var(--disp);font-weight:600;font-size:16px;margin-bottom:12px}
+  .term.small{max-width:720px}
+  .term.small .body{padding:14px 16px}
+  .term.small code{font-size:13.5px}
+  .cmd-note{margin:12px 0 0;color:var(--mut);font-size:14.5px;max-width:62ch}
+  .cmd-note code{font-family:var(--mono);font-size:12.5px;background:var(--wash);border:1px solid var(--hair);border-radius:5px;padding:1px 6px;color:var(--ink-2)}
+  .ref{margin-top:30px;border:1px solid var(--hair);border-radius:12px;padding:6px 18px}
+  .ref summary{cursor:pointer;font-family:var(--disp);font-weight:600;font-size:16px;padding:12px 0}
+  .ref pre{margin:0 0 14px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--ink-2)}
+
   /* ---- roadmap ---- */
   .road{padding:92px 0}
   .road h2{font-size:clamp(28px,4vw,40px);margin-bottom:8px}
@@ -191,6 +206,7 @@
     <nav>
       <a href="#what">What it is</a>
       <a href="#how">How it works</a>
+      <a href="#use">Commands</a>
       <a href="#install">Install</a>
       <a class="src" href="https://github.com/Eselase-Noble/laptoplink">Source</a>
     </nav>
@@ -321,6 +337,48 @@
       <span class="two">If a piped install is blocked on your network, do it in two steps:
       <code>curl -fsSL &lt;url&gt; -o install.sh &amp;&amp; bash install.sh</code></span>
     </p>
+  </div>
+</section>
+
+<section class="use" id="use">
+  <div class="wrap">
+    <h2>Send and receive</h2>
+    <p class="lede">Two machines, one command each. The receiver listens; the sender points at its address (the default port is 9031).</p>
+
+    <div class="cmd">
+      <div class="cmd-label">On the machine that will receive</div>
+      <div class="term small">
+        <div class="body"><span class="sigil">$</span><code>laplink receive --dest ~/incoming --accept-new</code></div>
+      </div>
+      <p class="cmd-note">Starts listening and prints its fingerprint. <code>--accept-new</code> trusts the first device that connects; drop it once paired.</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-label">On the machine that will send</div>
+      <div class="term small">
+        <div class="body"><span class="sigil">$</span><code>laplink send ./movie.mkv --to 192.168.1.50</code></div>
+      </div>
+      <p class="cmd-note">Send a file or a whole folder. Watch the live rate; the file lands verified on the other side.</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-label">Keep a folder in sync (only what changed)</div>
+      <div class="term small">
+        <div class="body"><span class="sigil">$</span><code>laplink sync ./photos --to 192.168.1.50 --delta</code></div>
+      </div>
+      <p class="cmd-note">Skips files already there; with <code>--delta</code>, a large file that changed a little moves in kilobytes. Add <code>--dry-run</code> to preview, <code>--delete</code> to mirror.</p>
+    </div>
+
+    <details class="ref">
+      <summary>All commands</summary>
+      <pre>laplink device show                 show this machine's identity and fingerprint
+laplink device pair --fingerprint FP   trust another machine by its fingerprint
+laplink send PATH... --to ADDR      send files or folders
+laplink receive --dest DIR          listen for incoming transfers
+laplink sync SRC --to ADDR          one-way folder sync  [--dry-run --delete --delta --exclude GLOB]
+laplink transfer list | resume ID   list or continue interrupted transfers
+laplink doctor                      check identity, port, and setup</pre>
+    </details>
   </div>
 </section>
 
