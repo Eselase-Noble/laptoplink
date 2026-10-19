@@ -1,187 +1,180 @@
 # LaptopLink
 
-Move files between your computers the way it should have always worked: pick a
-file or a whole folder, point it at another machine you trust, and watch it go —
-encrypted end to end, verified byte for byte, and resumable if the network blinks.
+Moving a big file between two of your own computers is still annoying in 2026.
+AirDrop stops at the Apple fence. `scp` means fiddling with SSH keys. Cloud
+drives make you upload a terabyte to someone else's server and pull it back
+down again. LaptopLink is an attempt to make the direct path the easy path: pick
+a file or a folder, point it at another machine you trust, and it goes straight
+there, encrypted the whole way and checked byte for byte when it lands.
 
-LaptopLink is a from-scratch file-transfer engine written in Rust. It is **not**
-a wrapper around `rsync` or `scp`. It speaks its own authenticated, chunked,
-resumable protocol over a mutually-authenticated encrypted channel, and it is
-built to carry anything from a one-line note to a multi-terabyte disk image
-without ever loading the whole thing into memory.
+It is written from scratch in Rust. It is not a wrapper around `rsync` or `scp`.
+It speaks its own authenticated protocol over an encrypted connection, splits
+files into verifiable chunks, and can pick up where it left off if the network
+drops. It is built to carry a one line note or a multi terabyte disk image
+without ever holding the whole thing in memory.
 
-> **Status:** Phases 1 and 2 are done and tested — a working, benchmarked
-> command-line tool for secure transfers over a local network. The desktop app
-> (Tauri), internet/NAT traversal, relay, and the web app (Next.js) are on the
-> roadmap. See [docs/FEATURES.md](docs/FEATURES.md) for an honest line-by-line
-> status. Nothing here is described as finished unless it has tests behind it.
+> **Where things stand.** Phases 1 through 3 are built and tested: a real,
+> benchmarked command line tool that does secure transfers and rsync style
+> folder sync over a local network. The desktop app, internet/NAT traversal,
+> relay, and the web app are still ahead. `docs/FEATURES.md` tracks every
+> feature line by line and is honest about what is not done. Nothing here is
+> called finished unless there are tests behind it.
 
----
+## What it does today
 
-## Why another transfer tool?
+* Encrypts and authenticates every connection. The handshake is Noise `XX` (via
+  the `snow` crate), which proves both machines' identities by their long lived
+  keys before any data moves, then protects every byte with ChaCha20-Poly1305.
+  No home rolled cryptography anywhere.
+* Splits files into chunks and verifies each one with BLAKE3 before it touches
+  the disk, then verifies the whole file again before it is committed.
+* Resumes. If a transfer dies halfway, run it again and the receiver asks only
+  for the chunks it is still missing. Nothing that already arrived is sent twice.
+* Keeps memory flat. A one terabyte file uses the same memory as a one megabyte
+  file because everything streams.
+* Refuses dangerous paths. Directory traversal, absolute paths, and symlink
+  tricks are all rejected, and data lands in a temporary file that is renamed
+  into place only after it fully verifies.
+* Carries whole folders, keeping their structure, and never follows symlinks out
+  of the tree you picked.
+* Syncs a folder the way rsync does: skip files that are already there, and for
+  a large file that changed only a little, send just the pieces that differ.
+* Ships a real command line tool with a live progress line, `--json` output for
+  scripts, stable exit codes, a built in benchmark, and a `doctor` check.
+* Is fast. On a 2019 i9 laptop it sustains around 280 MiB/s (about 2.2 Gbit/s)
+  on a single core with encryption and double hashing in the hot path, which
+  saturates gigabit ethernet with headroom to spare. These are measured numbers,
+  not promises. See `docs/BENCHMARKING.md`.
 
-Because the existing options each make you give something up:
+What is not here yet: transfers across the internet, NAT traversal, relays, the
+desktop and web apps, and two way sync. Those are designed and scheduled, not
+written. Again, the full status lives in `docs/FEATURES.md`.
 
-- **AirDrop / Nearby Share** are great until you cross an OS boundary.
-- **`scp`/`rsync` over SSH** work everywhere but mean key management, shell
-  accounts, and no friendly progress or resume for the non-expert.
-- **Cloud drives** make you upload a terabyte to someone else's computer and
-  download it again — twice the wait, none of the privacy.
+## Build it
 
-LaptopLink aims for the useful middle: direct device-to-device transfer with
-real cryptographic identities, integrity you can trust, resume that actually
-resumes, and one engine shared by a CLI, a desktop app, and a browser — so the
-security model is identical no matter how you drive it.
-
-## What's working today
-
-- 🔒 **Encrypted and authenticated** — every connection is a Noise `XX`
-  handshake (`snow` crate) that authenticates both devices by their long-lived
-  keys, then ChaCha20-Poly1305 on every byte. No home-grown crypto.
-- 🧩 **Chunked with per-chunk + whole-file verification** — BLAKE3 on each chunk
-  before it touches disk, and on the whole file before it's committed.
-- ⏸️ **Resumable** — interrupt a transfer and run it again; the receiver already
-  knows which chunks are verified and asks only for what's missing.
-- 💾 **Bounded memory** — streaming throughout; a 1 TB file uses the same memory
-  as a 1 MB file.
-- 🛡️ **Safe by construction** — path-traversal, absolute-path, and symlink
-  attacks are rejected; data lands in a temp file and is atomically renamed only
-  after it fully verifies.
-- 📁 **Files and folders** — whole directory trees transfer with structure
-  intact (symlinks are not followed).
-- 📟 **A real CLI** — live progress, `--json` output for scripts, stable exit
-  codes, a built-in benchmark, and a `doctor`.
-- ⚡ **Fast** — ~280 MiB/s (~2.2 Gbit/s) single-threaded on a 2019 i9 laptop,
-  with encryption and double-hashing in the hot path. That saturates 1 GbE with
-  room to spare. (Measured, not promised — see
-  [docs/BENCHMARKING.md](docs/BENCHMARKING.md).)
-
-What's **not** here yet: internet transfers / NAT traversal, relays, the desktop
-and web apps, delta (rsync-style) transfer, two-way sync, and mDNS discovery.
-Those are designed and scheduled, not done. Again: [docs/FEATURES.md](docs/FEATURES.md).
-
-## Install / build
-
-You need a recent Rust toolchain (1.80+). Then:
+You need a recent Rust toolchain, 1.80 or newer.
 
 ```bash
 git clone https://github.com/Eselase-Noble/laptoplink.git
 cd laptoplink
 cargo build --release
-# binary at target/release/laptoplink
+# the binary lands at target/release/laptoplink
 ```
 
-Optionally put it on your PATH:
+To put it on your PATH on macOS or Linux:
 
 ```bash
-install -m 0755 target/release/laptoplink /usr/local/bin/   # macOS/Linux
+install -m 0755 target/release/laptoplink /usr/local/bin/
 ```
 
-It builds and is tested on Linux, macOS, and Windows (see the CI workflow).
+It builds and is tested on Linux, macOS, and Windows. The CI workflow runs the
+whole suite on all three.
 
-## Quickstart: send a file from one machine to another
+## Send a file to another machine
 
-On the **receiving** computer, start a listener. The first time you connect a
-new device, run it in pairing mode so it trusts the sender on first contact:
+On the computer that will receive, start a listener. The first time you connect
+a new machine, run it in pairing mode so it trusts the sender on first contact:
 
 ```bash
 laptoplink receive --dest ~/incoming --accept-new
 ```
 
-It prints the port it's listening on and its own fingerprint.
+It prints the port it is listening on and its own fingerprint.
 
-On the **sending** computer, point at the receiver's IP (default port 9031):
+On the computer that will send, point at the receiver's address (the default
+port is 9031):
 
 ```bash
 laptoplink send ./ubuntu.iso --to 192.168.1.50
 ```
 
-You'll see a live progress line with percentage and MiB/s, and a summary when
-it's done. The file appears under `~/incoming` on the other side, verified.
-
-Want a whole folder? Just pass it:
+You get a live progress line with a percentage and a rate, and a short summary
+when it finishes. The file shows up under `~/incoming`, verified. A whole folder
+works the same way, and you can list several things at once:
 
 ```bash
 laptoplink send ./Photos ./notes.txt --to 192.168.1.50
 ```
 
-### Try it all on one machine
+### Try it on one machine
 
-No second computer handy? The repo ships a demo that runs a real two-process
-transfer over loopback and checks every file with SHA-256:
+No second computer handy? There is a demo that runs a real two process transfer
+over loopback and checks every file with SHA-256:
 
 ```bash
-./scripts/demo.sh 200     # transfer a 200 MB file + small files, verify
+./scripts/demo.sh 200     # move a 200 MB file plus small ones, then verify
 ```
 
-## Pairing and trust (read this once)
+## Pairing and trust
 
-Devices are identified by a **cryptographic key**, not an IP address — so nobody
-can impersonate a machine you trust just by taking its address. Each device's
-identity has a 64-character fingerprint; the first 16 characters are shown for
+Machines are identified by a cryptographic key, not by an IP address, so nobody
+can pretend to be a machine you trust just by taking its address. Each identity
+has a 64 character fingerprint, and the first 16 characters are shown for
 convenience.
 
 ```bash
-laptoplink device show      # your identity + fingerprint
-laptoplink device list      # devices you've paired with
+laptoplink device show      # your identity and fingerprint
+laptoplink device list      # machines you have paired with
 ```
 
-The receiver refuses unknown devices by default. You have two ways to establish
-trust:
+The receiver turns away unknown machines by default. There are two ways to set
+up trust. The easy one is trust on first use: start the receiver with
+`--accept-new` for the first connection, which is fine on a network you control.
+The careful one is to read the 16 character fingerprint to each other over a
+channel you already trust, in person or over the phone, and pair it by hand:
 
-1. **Trust on first use** — start the receiver with `--accept-new` for the
-   initial connection. Convenient on a network you control.
-2. **Verify out of band** — read the 16-character fingerprint aloud or over a
-   trusted channel and pre-pair it:
-   ```bash
-   laptoplink device pair --fingerprint <THEIR_FINGERPRINT> --name their-laptop
-   ```
-   This is the strongest option and defeats even a first-contact MITM.
+```bash
+laptoplink device pair --fingerprint <THEIR_FINGERPRINT> --name their-laptop
+```
 
-Changed your mind about a device?
+That second method defeats even a machine in the middle on the very first
+connection. Changed your mind about a device later?
 
 ```bash
 laptoplink device revoke --fingerprint <FINGERPRINT>
 ```
 
-## Resume an interrupted transfer
+## Pick up an interrupted transfer
 
-Transfers are tracked and recoverable. If one dies halfway:
+Transfers are tracked and recoverable. If one dies partway through:
 
 ```bash
 laptoplink transfer list                 # find the id
 laptoplink transfer status <TRANSFER_ID> # see what it was
-laptoplink transfer resume <TRANSFER_ID> # continue — only missing chunks move
+laptoplink transfer resume <TRANSFER_ID> # continue; only missing chunks move
 ```
 
-The receiver keeps a durable manifest of exactly which chunks it has verified
-and written, so resume never re-sends data that already arrived, and it never
-trusts partial data that fails the final whole-file check.
+The receiver keeps a durable record of exactly which chunks it has verified and
+written, so a resume never re sends data that already arrived and never trusts
+partial data that fails the final whole file check.
 
 ## Keep a folder in sync
 
-`sync` makes a device's destination match a source directory, moving only what
-changed — like `rsync`, but over LaptopLink's encrypted, verified transport.
+`sync` makes a device's destination match a source folder, moving only what
+changed, much like `rsync`, but over LaptopLink's encrypted and verified
+connection.
 
 ```bash
-# On the receiver: choose where synced files land.
+# On the receiver, choose where synced files land.
 laptoplink receive --dest ~/backup --accept-new
 
-# On the sender: preview first (shows what would transfer/skip/delete).
+# On the sender, preview first. This shows what would transfer, skip, or delete.
 laptoplink sync ./project --to 192.168.1.50 --dry-run --delete
 
-# Then do it for real. --delete prompts before removing extras (--yes skips).
+# Then run it for real. With --delete it asks before removing anything unless
+# you pass --yes.
 laptoplink sync ./project --to 192.168.1.50 --delete --exclude '*.tmp'
 ```
 
-Unchanged files are skipped (by size + mtime, or `--checksum` for content).
-Re-running a sync after a small edit is cheap. For a big file that changed only
-a little, add `--delta`: LaptopLink sends just the differing blocks. In testing,
-a ~2 KB edit to a 20 MB file re-synced by transferring **4.4 KiB** instead of
-the whole file — verified end-to-end by its whole-file hash before commit.
+Files that are already there get skipped, compared by size and modification time
+by default or by content hash with `--checksum`. Re running a sync after a small
+edit is cheap. When a large file changed only a little, add `--delta` and
+LaptopLink sends just the blocks that differ. In testing, a 2 KB edit to a 20 MB
+file re synced by moving 4.4 KB, and the result was checked against its whole
+file hash before it was committed.
 
-Deletion is never the default and only happens after every transfer succeeds;
-excluded paths are protected from it.
+Deletion is never the default, it only happens after every transfer has
+succeeded, and anything you exclude is protected from it.
 
 ## Command reference
 
@@ -192,9 +185,9 @@ laptoplink device pair --fingerprint FP     Trust a device by fingerprint
             [--name NAME]
 laptoplink device revoke --fingerprint FP   Stop trusting a device
 
-laptoplink send PATH... --to ADDR           Send files/folders to a device
+laptoplink send PATH... --to ADDR           Send files or folders to a device
             [--chunk-size BYTES] [--id ID]
-laptoplink sync SRC_DIR --to ADDR           One-way sync a directory's contents
+laptoplink sync SRC_DIR --to ADDR           One way sync a folder's contents
             [--dry-run] [--delete] [--exclude GLOB]...
             [--checksum] [--delta] [--yes]
 laptoplink receive [--dest DIR]             Listen for incoming transfers
@@ -205,46 +198,47 @@ laptoplink transfer status ID               Show one transfer
 laptoplink transfer resume ID               Resume an interrupted transfer
 laptoplink transfer cancel ID               Mark a transfer cancelled
 
-laptoplink benchmark [--size-mib N]         Measure throughput (loopback)
+laptoplink benchmark [--size-mib N]         Measure throughput over loopback
             [--chunk-size BYTES]
-laptoplink doctor                           Check local setup / port / identity
+laptoplink doctor                           Check local setup, port, identity
 ```
 
-Global flags: `--json` (machine-readable output), `--quiet`, `--verbose`,
-`--home DIR` (use an isolated config/data root — handy for testing or running
-multiple identities).
+Global flags that work anywhere: `--json` for machine readable output, `--quiet`,
+`--verbose`, and `--home DIR` to use an isolated config and data root, which is
+handy for testing or running more than one identity on a machine.
 
-**Exit codes:** `0` success · `1` generic · `2` usage · `3` auth/rejected ·
-`4` integrity failure · `5` transfer not found · `6` resource limit. Good for
-scripting and CI.
+Exit codes are stable for scripting: 0 success, 1 generic, 2 usage, 3
+authorization or rejection, 4 integrity failure, 5 transfer not found, 6
+resource limit.
 
-## How it works (the short version)
+## How it works, briefly
 
 ```
   sender                                        receiver
-  ──────                                        ────────
-  TCP connect → Noise XX handshake  ←───────→   authenticate by key fingerprint
-  "here are the files I have"       ─────────→  check manifest, decide what's needed
-  send only the needed chunks       ─────────→  verify each chunk (BLAKE3), write
-  "that's the whole file, here's its hash" ──→  re-verify whole file, then
-                                                atomically move it into place
+  ------                                        --------
+  connect, then Noise XX handshake   <------->  authenticate by key fingerprint
+  "here are the files I have"        -------->  check what is needed
+  send only the needed chunks        -------->  verify each chunk, write to disk
+  "that is the whole file, here is   -------->  re verify the whole file, then
+   its hash"                                    move it into place atomically
 ```
 
-- One streaming pass per file hashes the whole file and emits chunks — no double
-  read, bounded memory.
-- Backpressure is natural: the receiver only pulls from the socket as fast as it
-  can hash and write, which throttles the sender through TCP.
-- Everything durable (the receiver's chunk bitmap, the sender's transfer record)
-  is written with a temp-file-plus-atomic-rename so a crash can't corrupt it.
+One streaming pass over each file both hashes it and sends its chunks, so a large
+file is read once, not twice. Backpressure is natural: the receiver only pulls
+from the socket as fast as it can hash and write, which throttles the sender
+through ordinary TCP flow control. Everything durable, the receiver's chunk
+record and the sender's transfer log, is written with a temporary file and an
+atomic rename so a crash cannot leave it half written.
 
-The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); the exact
-wire format is in [docs/PROTOCOL.md](docs/PROTOCOL.md); the security analysis is
-in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+The full design is in `docs/ARCHITECTURE.md`, the exact wire format is in
+`docs/PROTOCOL.md`, and the security analysis, including what is not yet
+protected, is in `docs/THREAT_MODEL.md`.
 
 ## Performance
 
-Measured on an Intel Core i9-9880H (2019), release build, 512 MiB over loopback
-(so this is the CPU/crypto ceiling, not a network number):
+Measured on an Intel Core i9-9880H (2019), release build, 512 MiB over loopback.
+Loopback removes the physical link, so this is the ceiling set by the CPU doing
+encryption and hashing, not a network figure.
 
 | Chunk size | Throughput  |
 |-----------:|------------:|
@@ -252,72 +246,72 @@ Measured on an Intel Core i9-9880H (2019), release build, 512 MiB over loopback
 | 4 MiB      | 283 MiB/s   |
 | 8 MiB      | 257 MiB/s   |
 
-That's ~2.2 Gbit/s on a single core while encrypting and hashing every byte
-twice. Reproduce it with `./scripts/benchmark.sh` and read the honest caveats in
-[docs/BENCHMARKING.md](docs/BENCHMARKING.md). Your mileage will vary with CPU,
-disk, and link — and we won't pretend otherwise.
+That is roughly 2.2 Gbit/s on a single core while encrypting and hashing every
+byte twice. Reproduce it with `./scripts/benchmark.sh` and read the honest
+caveats in `docs/BENCHMARKING.md`. Your numbers will depend on your CPU, disk,
+and link, and the docs do not pretend otherwise.
 
-## Repository layout
+## Layout of the repository
 
 ```
 crates/laptoplink-core/   The engine: identity, transport, protocol, chunking,
-                          manifests, path safety, send/receive. All the logic.
-crates/laptoplink-cli/    The `laptoplink` binary — a thin wrapper over the core.
+                          manifests, path safety, send, receive, sync, delta.
+crates/laptoplink-cli/    The `laptoplink` binary, a thin shell over the core.
 docs/                     Architecture, protocol, threat model, benchmarking,
-                          troubleshooting, feature status.
-scripts/                  demo.sh (verified two-process transfer), benchmark.sh
-.github/workflows/        CI: fmt + clippy + tests on Linux, macOS, Windows.
+                          troubleshooting, and feature status.
+scripts/                  demo.sh (a verified two process transfer), benchmark.sh
+.github/workflows/        CI: fmt, clippy, and tests on Linux, macOS, Windows.
 ```
 
-The engine is a library on purpose: the CLI today, and the Tauri desktop app and
-Next.js web backend later, all call the **same** code so they can't drift apart
-on security or correctness.
+The engine is a library on purpose. The command line tool today, and the desktop
+and web front ends later, all call the same code, so they cannot drift apart on
+security or correctness.
 
 ## Testing
 
 ```bash
-cargo test            # unit + end-to-end integration tests
+cargo test            # unit and end to end integration tests
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 The integration tests stand up a real receiver on a loopback port and run a real
-sender against it — no mocks — covering round-trip integrity, directory trees,
-rejection of unpaired peers, full-file resume, partial-chunk resume, and
-path-traversal refusal. Large files are generated at test time; no big binaries
-are committed to the repo.
+sender against it, with no mocks. They cover round trip integrity, folder trees,
+turning away unpaired machines, full and partial resume, path traversal refusal,
+sync skip and delete and exclude behavior, and delta reconstruction. Large files
+are generated at test time, so no big binaries live in the repository.
 
 ## Roadmap
 
 | Phase | What | State |
 |------:|------|-------|
-| 1 | Architecture & threat model | ✅ done |
-| 2 | Secure local CLI engine (this) | ✅ done |
-| 3 | Resume polish, one-way sync, rsync-style delta transfer | ✅ done (core) |
-| 4 | Desktop app (Tauri + React/TypeScript) | ⬜ planned |
-| 5 | Internet: signaling, NAT traversal, encrypted relay, QUIC eval | ⬜ planned |
-| 6 | Web app (Next.js + TypeScript) with documented browser limits | ⬜ planned |
-| 7 | Packaging, signing, fuzzing, OS keystore, release automation | 🟡 started |
+| 1 | Architecture and threat model | done |
+| 2 | Secure local command line engine | done |
+| 3 | Resume, one way sync, rsync style delta transfer | done (core) |
+| 4 | Desktop app (Tauri with React and TypeScript) | planned |
+| 5 | Internet: signaling, NAT traversal, encrypted relay, QUIC evaluation | planned |
+| 6 | Web app (Next.js with TypeScript) with documented browser limits | planned |
+| 7 | Packaging, signing, fuzzing, OS keystore, release automation | started |
 
-Details and the per-feature breakdown: [docs/FEATURES.md](docs/FEATURES.md).
+The per feature breakdown is in `docs/FEATURES.md`.
 
 ## Contributing
 
 Issues and pull requests are welcome. Please run `cargo fmt`, `cargo clippy
--- -D warnings`, and `cargo test` before opening a PR — CI runs all three on all
-three platforms. New transfer behavior should come with a test that exercises
-the real send/receive path.
+-- -D warnings`, and `cargo test` before opening a pull request, since CI runs
+all three on all three platforms. New transfer behavior should come with a test
+that exercises the real send and receive path.
 
 ## Security
 
-LaptopLink puts security and data integrity ahead of speed, always. If you find
-a vulnerability, please report it privately to the maintainers rather than
-opening a public issue. The current defenses and their limits are documented
-candidly in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — including what is
-**not** yet protected (traffic analysis, OS-keystore key storage, DoS from
-unauthenticated peers).
+LaptopLink puts security and data integrity ahead of speed, every time. If you
+find a vulnerability, please report it privately to the maintainers rather than
+opening a public issue. The current defenses and their limits are written down
+plainly in `docs/THREAT_MODEL.md`, including the things that are not yet
+protected, such as traffic analysis, storing keys in the OS keystore, and denial
+of service from machines that have not been paired.
 
 ## License
 
-Dual-licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
-[MIT license](LICENSE-MIT) at your option.
+Dual licensed under either the Apache License, Version 2.0 (`LICENSE-APACHE`) or
+the MIT license (`LICENSE-MIT`), at your option.
