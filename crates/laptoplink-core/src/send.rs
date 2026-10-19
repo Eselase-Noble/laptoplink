@@ -370,7 +370,9 @@ pub(crate) fn send_one_file(
                     hash,
                 },
             )?;
-            secure.write_all(data)?;
+            secure
+                .write_all(data)
+                .map_err(|e| Error::other(format!("sub=chunk_payload: {e}")))?;
             bytes_sent += n as u64;
             sink.on_event(ProgressEvent::Progress {
                 file_index: plan.file_index,
@@ -386,7 +388,9 @@ pub(crate) fn send_one_file(
             return Err(Error::SourceChanged(item.source_path.clone()));
         }
     }
-    secure.flush()?;
+    secure
+        .flush()
+        .map_err(|e| Error::other(format!("sub=flush: {e}")))?;
 
     let file_hash = hasher.finalize_hex();
     protocol::write_control(
@@ -395,10 +399,13 @@ pub(crate) fn send_one_file(
             file_index: plan.file_index,
             file_hash,
         },
-    )?;
+    )
+    .map_err(|e| Error::other(format!("sub=file_done: {e}")))?;
 
     // Await the receiver's verdict for this file.
-    match protocol::read_control(secure, config.limits.max_message_bytes)? {
+    match protocol::read_control(secure, config.limits.max_message_bytes)
+        .map_err(|e| Error::other(format!("sub=read_file_result: {e}")))?
+    {
         Control::FileResult { ok: true, .. } => {
             sink.on_event(ProgressEvent::FileCompleted {
                 file_index: plan.file_index,
