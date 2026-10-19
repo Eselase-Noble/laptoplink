@@ -142,6 +142,7 @@ fn start_receiver(
             accept_new,
             device_name: identity.name.clone(),
             once: false,
+            allow_sender_dest: false,
         };
         let mut sink = EventSink { app: app2.clone() };
         if let Err(e) = recv::listen(&config, &identity, &bind_thread, &opts, &mut sink) {
@@ -186,6 +187,7 @@ async fn send_files(
                 transfer_id: None,
                 chunk_size: None,
                 device_name: state.identity.name.clone(),
+                dest: None,
             },
             &mut sink,
         )

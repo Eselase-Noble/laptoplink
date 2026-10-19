@@ -108,6 +108,26 @@ works the same way, and you can list several things at once:
 laptoplink send ./Photos ./notes.txt --to 192.168.1.50
 ```
 
+If you want the sender to choose the destination folder in one command, start
+the receiver with `--allow-sender-dest` and pass `--dest` on the send:
+
+```bash
+# receiver (opts in to sender-chosen folders)
+laptoplink receive --accept-new --allow-sender-dest
+# sender (one command: file, address, and where it should land)
+laptoplink send ./movie.mkv --to 192.168.1.50 --dest ~/Movies/incoming
+```
+
+The receiver still has to be listening (like `scp` needs `sshd`), but after that
+the sender drives everything. Letting a sender write to an arbitrary folder is
+powerful, so it is off until the receiver opts in.
+
+**No internet needed on the same network.** When both machines are on the same
+Wi-Fi or LAN, the transfer is direct over the local network and never touches
+the internet. No data plan, no cloud. It even works on a router or phone hotspot
+that has no internet at all, as long as both machines are joined to it. (Talking
+between two *different* networks is the future Phase 5.)
+
 ### Try it on one machine
 
 No second computer handy? There is a demo that runs a real two process transfer
@@ -199,11 +219,14 @@ laptoplink device revoke --fingerprint FP   Stop trusting a device
 
 laptoplink send PATH... --to ADDR           Send files or folders to a device
             [--chunk-size BYTES] [--id ID]
+            [--dest DIR]                    Ask the receiver to save here
+                                            (receiver must allow it; see below)
 laptoplink sync SRC_DIR --to ADDR           One way sync a folder's contents
             [--dry-run] [--delete] [--exclude GLOB]...
             [--checksum] [--delta] [--yes]
 laptoplink receive [--dest DIR]             Listen for incoming transfers
             [--bind ADDR] [--accept-new] [--once]
+            [--allow-sender-dest]           Let the sender choose the folder
 
 laptoplink transfer list                    List known transfers
 laptoplink transfer status ID               Show one transfer

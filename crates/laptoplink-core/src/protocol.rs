@@ -40,6 +40,11 @@ pub enum Control {
     Offer {
         transfer_id: String,
         files: Vec<FileOffer>,
+        /// Destination directory requested by the sender. The receiver honors
+        /// it only when started with `allow_sender_dest`; otherwise it uses its
+        /// own configured destination and ignores this.
+        #[serde(default)]
+        dest: Option<String>,
     },
     /// Receiver's per-file plan: which chunks it still needs (enables resume).
     OfferResponse { files: Vec<FilePlan> },

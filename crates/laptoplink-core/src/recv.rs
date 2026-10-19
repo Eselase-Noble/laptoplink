@@ -38,6 +38,10 @@ pub struct ReceiveOptions {
     pub device_name: String,
     /// Handle exactly one connection then return (used by tests/one-shot mode).
     pub once: bool,
+    /// Honor a destination directory requested by the sender (`send --dest`).
+    /// Off by default: the receiver always controls where files land unless it
+    /// explicitly opts in, since a sender-chosen absolute path is powerful.
+    pub allow_sender_dest: bool,
 }
 
 /// Bind `bind_addr` and serve inbound transfers until `once` is satisfied or an
@@ -178,9 +182,20 @@ fn handle_connection(
     // --- Dispatch: a push Offer or a one-way SyncOffer -------------------
     let first = protocol::read_control(&mut secure, config.limits.max_message_bytes)?;
     match first {
-        Control::Offer { transfer_id, files } => {
-            handle_offer(config, &mut secure, opts, sink, &fp, transfer_id, files)
-        }
+        Control::Offer {
+            transfer_id,
+            files,
+            dest,
+        } => handle_offer(
+            config,
+            &mut secure,
+            opts,
+            sink,
+            &fp,
+            transfer_id,
+            files,
+            dest,
+        ),
         Control::SyncOffer {
             sync_id,
             files,
@@ -248,13 +263,33 @@ fn handle_offer(
     fp: &crate::identity::Fingerprint,
     transfer_id: String,
     files: Vec<protocol::FileOffer>,
+    requested_dest: Option<String>,
 ) -> Result<()> {
     check_limits(&files, &config.limits)?;
 
-    let mut manifest = ReceiverManifest::load(&opts.dest, &transfer_id)?
-        .unwrap_or_else(|| ReceiverManifest::new(&opts.dest, &transfer_id, fp.full()));
+    // Where files land. The receiver's own destination by default; only when it
+    // opted in with `allow_sender_dest` do we honor the sender's request.
+    let dest_root = match requested_dest {
+        Some(d) if opts.allow_sender_dest => {
+            sink.on_event(ProgressEvent::Note(format!(
+                "using sender-requested destination: {d}"
+            )));
+            PathBuf::from(d)
+        }
+        Some(_) => {
+            sink.on_event(ProgressEvent::Note(
+                "ignoring sender-requested destination (receiver did not allow it)".into(),
+            ));
+            opts.dest.clone()
+        }
+        None => opts.dest.clone(),
+    };
+    std::fs::create_dir_all(&dest_root)?;
 
-    let tmp_dir = opts.dest.join(".laptoplink").join("tmp").join(&transfer_id);
+    let mut manifest = ReceiverManifest::load(&dest_root, &transfer_id)?
+        .unwrap_or_else(|| ReceiverManifest::new(&dest_root, &transfer_id, fp.full()));
+
+    let tmp_dir = dest_root.join(".laptoplink").join("tmp").join(&transfer_id);
     std::fs::create_dir_all(&tmp_dir)?;
 
     let total_bytes: u64 = files.iter().map(|f| f.size).sum();
@@ -267,7 +302,7 @@ fn handle_offer(
     let mut plans = Vec::with_capacity(files.len());
     for (idx, f) in files.iter().enumerate() {
         let file_index = idx as u32;
-        let dest_path = pathsafety::safe_join(&opts.dest, &f.rel_path)?;
+        let dest_path = pathsafety::safe_join(&dest_root, &f.rel_path)?;
         let part_path = tmp_dir.join(format!("{file_index}.part"));
         let count = chunk::chunk_count(f.size, f.chunk_size);
 
@@ -334,7 +369,7 @@ fn handle_offer(
 
     protocol::write_control(secure, &Control::OfferResponse { files: plans })?;
 
-    let bytes = run_receive_loop(config, secure, &opts.dest, &mut manifest, sink)?;
+    let bytes = run_receive_loop(config, secure, &dest_root, &mut manifest, sink)?;
     manifest.save()?;
     sink.on_event(ProgressEvent::TransferCompleted {
         transfer_id,

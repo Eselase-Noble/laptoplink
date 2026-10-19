@@ -39,6 +39,9 @@ pub struct SendOptions {
     pub chunk_size: Option<u32>,
     /// This device's display name, sent in `Hello`.
     pub device_name: String,
+    /// Destination directory requested on the receiver. Honored only if the
+    /// receiver was started with `allow_sender_dest`.
+    pub dest: Option<String>,
 }
 
 /// Summary returned to callers for reporting / exit codes.
@@ -175,6 +178,7 @@ pub fn send(
         &items,
         &offers,
         total_bytes,
+        opts.dest.clone(),
         sink,
     );
 
@@ -236,6 +240,7 @@ fn run_send(
     items: &[SendItem],
     offers: &[FileOffer],
     total_bytes: u64,
+    dest: Option<String>,
     sink: &mut dyn ProgressSink,
 ) -> Result<SendSummary> {
     let mut secure = connect_and_hello(config, identity, target_addr, sink)?;
@@ -246,6 +251,7 @@ fn run_send(
         &Control::Offer {
             transfer_id: transfer_id.to_string(),
             files: offers.to_vec(),
+            dest,
         },
     )?;
     let plans = match protocol::read_control(&mut secure, config.limits.max_message_bytes)? {
@@ -634,6 +640,7 @@ pub fn resume(
             transfer_id: Some(transfer_id.to_string()),
             chunk_size: None,
             device_name: device_name.to_string(),
+            dest: None,
         },
         sink,
     )

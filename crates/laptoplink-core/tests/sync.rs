@@ -50,6 +50,7 @@ fn spawn_receiver(
             accept_new: true,
             device_name: "receiver".into(),
             once: true,
+            allow_sender_dest: false,
         };
         recv::serve_on(&listener, &cfg, &id, &opts, &mut NullSink)
     });

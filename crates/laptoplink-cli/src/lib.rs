@@ -122,6 +122,11 @@ struct SendArgs {
     /// Reuse an existing transfer id (manual resume).
     #[arg(long)]
     id: Option<String>,
+
+    /// Requested destination directory on the receiver. Honored only if the
+    /// receiver was started with --allow-sender-dest.
+    #[arg(long, value_name = "DIR")]
+    dest: Option<String>,
 }
 
 #[derive(Args)]
@@ -184,6 +189,11 @@ struct ReceiveArgs {
     /// Handle a single inbound transfer, then exit.
     #[arg(long)]
     once: bool,
+
+    /// Let the sender choose the destination directory (via `send --dest`).
+    /// Off by default: the receiver controls where files land.
+    #[arg(long)]
+    allow_sender_dest: bool,
 }
 
 #[derive(Subcommand)]
@@ -318,6 +328,7 @@ fn run_send(cli: &Cli, config: &Config, args: &SendArgs) -> anyhow::Result<()> {
             transfer_id: args.id.clone(),
             chunk_size: args.chunk_size,
             device_name: engine.identity().name.clone(),
+            dest: args.dest.clone(),
         },
         &mut sink,
     )?;
@@ -382,6 +393,7 @@ fn run_receive(cli: &Cli, config: &Config, args: &ReceiveArgs) -> anyhow::Result
         accept_new: args.accept_new,
         device_name: engine.identity().name.clone(),
         once: args.once,
+        allow_sender_dest: args.allow_sender_dest,
     };
     recv::listen(config, engine.identity(), &bind, &opts, &mut sink)?;
     Ok(())
@@ -482,6 +494,7 @@ fn run_benchmark(cli: &Cli, config: &Config, args: &BenchArgs) -> anyhow::Result
             accept_new: true,
             device_name: "bench-receiver".into(),
             once: true,
+            allow_sender_dest: false,
         };
         let mut sink = laptoplink_core::progress::NullSink;
         recv::serve_on(&listener, &recv_cfg, &recv_id, &opts, &mut sink)
@@ -500,6 +513,7 @@ fn run_benchmark(cli: &Cli, config: &Config, args: &BenchArgs) -> anyhow::Result
             transfer_id: None,
             chunk_size: args.chunk_size,
             device_name: identity.name.clone(),
+            dest: None,
         },
         &mut sink,
     )?;

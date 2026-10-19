@@ -71,6 +71,34 @@ fn spawn_receiver(
             accept_new,
             device_name: "receiver".into(),
             once: true,
+            allow_sender_dest: false,
+        };
+        let mut sink = NullSink;
+        recv::serve_on(&listener, &cfg, &id, &opts, &mut sink)
+    });
+    (addr, handle)
+}
+
+/// Like [`spawn_receiver`] but with an explicit `allow_sender_dest`.
+fn spawn_receiver_opts(
+    cfg: &Config,
+    id: &DeviceIdentity,
+    dest: &Path,
+    accept_new: bool,
+    allow_sender_dest: bool,
+) -> (String, thread::JoinHandle<laptoplink_core::Result<()>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let cfg = cfg.clone();
+    let id = id.clone();
+    let dest = dest.to_path_buf();
+    let handle = thread::spawn(move || {
+        let opts = recv::ReceiveOptions {
+            dest,
+            accept_new,
+            device_name: "receiver".into(),
+            once: true,
+            allow_sender_dest,
         };
         let mut sink = NullSink;
         recv::serve_on(&listener, &cfg, &id, &opts, &mut sink)
@@ -83,6 +111,7 @@ fn send_opts() -> send::SendOptions {
         transfer_id: None,
         chunk_size: None,
         device_name: "sender".into(),
+        dest: None,
     }
 }
 
@@ -140,6 +169,53 @@ fn directory_tree_preserves_structure() {
 }
 
 #[test]
+fn sender_dest_is_honored_only_when_allowed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (scfg, sid) = make_identity(&tmp.path().join("sender"), "sender");
+    let (rcfg, rid) = make_identity(&tmp.path().join("receiver"), "receiver");
+
+    let src = tmp.path().join("src/data.bin");
+    write_test_file(&src, 64 * 1024);
+    let receiver_default = tmp.path().join("default-dest");
+    let sender_wants = tmp.path().join("sender-chosen");
+
+    let opts = || send::SendOptions {
+        transfer_id: None,
+        chunk_size: None,
+        device_name: "sender".into(),
+        dest: Some(sender_wants.to_string_lossy().into_owned()),
+    };
+
+    // Receiver does NOT allow sender dest -> file lands under the receiver's own dest.
+    let (addr, h) = spawn_receiver_opts(&rcfg, &rid, &receiver_default, true, false);
+    let items = send::expand_sources(std::slice::from_ref(&src)).unwrap();
+    send::send(&scfg, &sid, &addr, items, opts(), &mut NullSink).unwrap();
+    h.join().unwrap().unwrap();
+    assert!(
+        receiver_default.join("data.bin").exists(),
+        "should use receiver dest"
+    );
+    assert!(
+        !sender_wants.join("data.bin").exists(),
+        "must ignore sender dest"
+    );
+
+    // Receiver allows sender dest -> file lands where the sender asked.
+    let (addr2, h2) = spawn_receiver_opts(&rcfg, &rid, &receiver_default, true, true);
+    let items2 = send::expand_sources(std::slice::from_ref(&src)).unwrap();
+    send::send(&scfg, &sid, &addr2, items2, opts(), &mut NullSink).unwrap();
+    h2.join().unwrap().unwrap();
+    assert!(
+        sender_wants.join("data.bin").exists(),
+        "should honor sender dest"
+    );
+    assert_eq!(
+        fs::read(&src).unwrap(),
+        fs::read(sender_wants.join("data.bin")).unwrap()
+    );
+}
+
+#[test]
 fn unpaired_peer_is_rejected() {
     let tmp = tempfile::tempdir().unwrap();
     let (scfg, sid) = make_identity(&tmp.path().join("sender"), "sender");
@@ -178,6 +254,7 @@ fn resume_skips_already_completed_file() {
         transfer_id: Some(tid.clone()),
         chunk_size: Some(1024 * 1024),
         device_name: "sender".into(),
+        dest: None,
     };
     let (addr, handle) = spawn_receiver(&rcfg, &rid, &dest, true);
     let items = send::expand_sources(std::slice::from_ref(&src)).unwrap();
@@ -189,6 +266,7 @@ fn resume_skips_already_completed_file() {
         transfer_id: Some(tid),
         chunk_size: Some(1024 * 1024),
         device_name: "sender".into(),
+        dest: None,
     };
     let (addr2, handle2) = spawn_receiver(&rcfg, &rid, &dest, true);
     let items2 = send::expand_sources(std::slice::from_ref(&src)).unwrap();
@@ -254,6 +332,7 @@ fn partial_resume_sends_only_missing_chunks() {
         transfer_id: Some(tid.clone()),
         chunk_size: Some(chunk_size),
         device_name: "sender".into(),
+        dest: None,
     };
     let (addr, handle) = spawn_receiver(&rcfg, &rid, &dest, true);
     let items = send::expand_sources(std::slice::from_ref(&src)).unwrap();
