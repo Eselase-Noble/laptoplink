@@ -39,6 +39,22 @@ pub fn open_part_file(path: &Path) -> Result<File> {
     Ok(opts.open(path)?)
 }
 
+/// Create a fresh, empty part file for writing (truncating any existing one),
+/// owner-only perms. Used by delta reconstruction, which rebuilds from scratch.
+pub fn create_part_file(path: &Path) -> Result<File> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut opts = OpenOptions::new();
+    opts.create(true).read(true).write(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    Ok(opts.open(path)?)
+}
+
 /// Flush a file's data durably to storage (best-effort `fsync`).
 ///
 /// Returns the distinction between "written to OS cache" and "confirmed

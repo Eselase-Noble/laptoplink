@@ -153,6 +153,11 @@ struct SyncArgs {
     #[arg(long)]
     checksum: bool,
 
+    /// Use rsync-style delta transfer for changed files that already exist at
+    /// the destination (sends only the differing parts).
+    #[arg(long)]
+    delta: bool,
+
     /// Skip the confirmation prompt for --delete.
     #[arg(long)]
     yes: bool,
@@ -348,6 +353,7 @@ fn run_sync(cli: &Cli, config: &Config, args: &SyncArgs) -> anyhow::Result<()> {
             delete: args.delete,
             dry_run: args.dry_run,
             checksum: args.checksum,
+            delta: args.delta,
             excludes: args.exclude.clone(),
             chunk_size: args.chunk_size,
             device_name: engine.identity().name.clone(),

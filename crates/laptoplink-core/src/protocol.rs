@@ -80,6 +80,9 @@ pub enum Control {
         dry_run: bool,
         /// Compare file contents by hash rather than size + mtime.
         checksum: bool,
+        /// Use delta transfer for changed files that already exist.
+        #[serde(default)]
+        delta: bool,
         /// Exclude globs (already applied by the sender); the receiver also
         /// uses them to protect matching destination files from deletion.
         excludes: Vec<String>,
@@ -94,6 +97,26 @@ pub enum Control {
     },
     /// Receiver's final message after a sync: how many files it deleted.
     SyncComplete { deleted: u64 },
+
+    // --- Delta transfer (Phase 3) ----------------------------------------
+    /// Sender asks the receiver for block signatures of its existing copy.
+    DeltaRequest { file_index: u32 },
+    /// Receiver's block signatures for its basis file: `(weak, strong-hex)`.
+    DeltaSignatures {
+        file_index: u32,
+        block_size: u32,
+        sigs: Vec<(u32, String)>,
+    },
+    /// Copy `count` consecutive basis blocks starting at `start_block`.
+    DeltaCopy {
+        file_index: u32,
+        start_block: u64,
+        count: u64,
+    },
+    /// Literal run of exactly `len` bytes follows on the stream.
+    DeltaLiteral { file_index: u32, len: u32 },
+    /// Sender finished the delta; `file_hash` is the whole new-file BLAKE3.
+    DeltaDone { file_index: u32, file_hash: String },
 }
 
 /// A file proposed in an [`Control::Offer`].
@@ -126,6 +149,10 @@ pub struct FilePlan {
     pub needed: ChunkSelection,
     /// True if some verified chunks were reused from a prior attempt.
     pub resume: bool,
+    /// True if the sender should send this file via delta (the receiver has an
+    /// older copy to reuse as the basis). `needed` is ignored when set.
+    #[serde(default)]
+    pub delta: bool,
 }
 
 /// Selection of chunks the receiver wants, kept compact for the common cases.

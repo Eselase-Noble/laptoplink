@@ -38,6 +38,8 @@ pub struct SyncOptions {
     pub dry_run: bool,
     /// Compare file contents by hash instead of size + mtime.
     pub checksum: bool,
+    /// Use delta transfer for changed files that already exist at the dest.
+    pub delta: bool,
     /// Exclude globs applied to both the source list and deletion scan.
     pub excludes: Vec<String>,
     /// Force a chunk size for transferred files (else adaptive).
@@ -118,6 +120,7 @@ pub fn sync(
             delete: opts.delete,
             dry_run: opts.dry_run,
             checksum: opts.checksum,
+            delta: opts.delta,
             excludes: opts.excludes.clone(),
         },
     )?;
@@ -163,13 +166,27 @@ pub fn sync(
                     file_index,
                     needed: ChunkSelection::All,
                     resume: false,
+                    delta: false,
                 });
             if matches!(plan.needed, ChunkSelection::None) {
                 continue; // identical; skipped
             }
-            let (sent, _) =
-                send::send_one_file(config, &mut secure, item, &offers[idx], &plan, sink)?;
-            bytes_transferred += sent;
+            if plan.delta {
+                // Changed file with a basis at the destination: delta transfer.
+                let sent = send::delta_send_file(
+                    config,
+                    &mut secure,
+                    item,
+                    &offers[idx],
+                    file_index,
+                    sink,
+                )?;
+                bytes_transferred += sent;
+            } else {
+                let (sent, _) =
+                    send::send_one_file(config, &mut secure, item, &offers[idx], &plan, sink)?;
+                bytes_transferred += sent;
+            }
         }
     }
 

@@ -11,6 +11,7 @@
 
 use crate::chunk;
 use crate::config::Config;
+use crate::delta;
 use crate::error::{Error, Result};
 use crate::identity::DeviceIdentity;
 use crate::manifest::{self, SenderFile, SenderRecord, TransferState};
@@ -276,6 +277,7 @@ fn run_send(
                 file_index,
                 needed: ChunkSelection::All,
                 resume: false,
+                delta: false,
             });
 
         let (sent, skipped) = send_one_file(config, &mut secure, item, offer, &plan, sink)?;
@@ -419,6 +421,141 @@ pub(crate) fn send_one_file(
     }
 
     Ok((bytes_sent, bytes_skipped))
+}
+
+/// Send one file as a delta against the receiver's existing copy.
+///
+/// Requests block signatures, rolls over the source emitting copy/literal
+/// instructions, then sends the whole-file hash for the receiver to verify
+/// before it commits. Returns the number of literal (actually-transmitted)
+/// bytes — the delta's real network cost.
+pub(crate) fn delta_send_file(
+    config: &Config,
+    secure: &mut SecureStream,
+    item: &SendItem,
+    offer: &FileOffer,
+    file_index: u32,
+    sink: &mut dyn ProgressSink,
+) -> Result<u64> {
+    // Source-change guard, as in the full-file path.
+    let meta = std::fs::metadata(&item.source_path)?;
+    if meta.len() != offer.size || mtime_unix(&meta) != offer.mtime {
+        return Err(Error::SourceChanged(item.source_path.clone()));
+    }
+
+    sink.on_event(ProgressEvent::FileStarted {
+        file_index,
+        rel_path: item.rel_path.clone(),
+        size: offer.size,
+        resumed_bytes: 0,
+    });
+
+    // Ask the receiver for its basis block signatures.
+    protocol::write_control(secure, &Control::DeltaRequest { file_index })?;
+    let (block_size, sigs) = match protocol::read_control(secure, config.limits.max_message_bytes)?
+    {
+        Control::DeltaSignatures {
+            block_size, sigs, ..
+        } => (block_size, sigs),
+        other => {
+            return Err(Error::protocol(format!(
+                "expected DeltaSignatures, got {other:?}"
+            )))
+        }
+    };
+    let sigs: Vec<delta::BlockSig> = sigs
+        .into_iter()
+        .map(|(weak, strong)| delta::BlockSig { weak, strong })
+        .collect();
+    let index = delta::SigIndex::new(block_size, &sigs);
+
+    // Stream the source through a hashing reader so we get the whole-file hash
+    // for free in the same single pass used for delta encoding.
+    let file = std::fs::File::open(&item.source_path)?;
+    let mut reader = HashingReader {
+        inner: file,
+        hasher: chunk::FileHasher::new(),
+    };
+    let mut literal_bytes: u64 = 0;
+
+    delta::encode_stream(&mut reader, &index, |emit| {
+        match emit {
+            delta::Emit::Copy { start, count } => {
+                protocol::write_control(
+                    secure,
+                    &Control::DeltaCopy {
+                        file_index,
+                        start_block: start,
+                        count,
+                    },
+                )?;
+            }
+            delta::Emit::Literal(bytes) => {
+                protocol::write_control(
+                    secure,
+                    &Control::DeltaLiteral {
+                        file_index,
+                        len: bytes.len() as u32,
+                    },
+                )?;
+                secure.write_all(bytes).map_err(Error::Io)?;
+                literal_bytes += bytes.len() as u64;
+                sink.on_event(ProgressEvent::Progress {
+                    file_index,
+                    delta_bytes: bytes.len() as u64,
+                });
+            }
+        }
+        Ok(())
+    })?;
+    secure.flush().map_err(Error::Io)?;
+
+    let file_hash = reader.hasher.finalize_hex();
+    protocol::write_control(
+        secure,
+        &Control::DeltaDone {
+            file_index,
+            file_hash,
+        },
+    )?;
+
+    match protocol::read_control(secure, config.limits.max_message_bytes)? {
+        Control::FileResult { ok: true, .. } => {
+            sink.on_event(ProgressEvent::FileCompleted {
+                file_index,
+                rel_path: item.rel_path.clone(),
+            });
+        }
+        Control::FileResult {
+            ok: false, error, ..
+        } => {
+            return Err(Error::Integrity(format!(
+                "receiver rejected delta '{}': {error}",
+                item.rel_path
+            )));
+        }
+        other => {
+            return Err(Error::protocol(format!(
+                "expected FileResult, got {other:?}"
+            )))
+        }
+    }
+    Ok(literal_bytes)
+}
+
+/// A reader that folds everything it reads into a BLAKE3 hasher — lets us hash
+/// the whole file during the single delta-encoding pass.
+struct HashingReader<R> {
+    inner: R,
+    hasher: chunk::FileHasher,
+}
+
+impl<R: Read> Read for HashingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.hasher.update(&buf[..n]);
+        Ok(n)
+    }
 }
 
 /// Read until `buf` is full or EOF; returns the number of bytes read.

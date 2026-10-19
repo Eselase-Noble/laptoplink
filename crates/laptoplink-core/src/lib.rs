@@ -28,6 +28,7 @@
 
 pub mod chunk;
 pub mod config;
+pub mod delta;
 pub mod error;
 pub mod fsutil;
 pub mod glob;

@@ -158,6 +158,31 @@ The receiver keeps a durable manifest of exactly which chunks it has verified
 and written, so resume never re-sends data that already arrived, and it never
 trusts partial data that fails the final whole-file check.
 
+## Keep a folder in sync
+
+`sync` makes a device's destination match a source directory, moving only what
+changed — like `rsync`, but over LaptopLink's encrypted, verified transport.
+
+```bash
+# On the receiver: choose where synced files land.
+laptoplink receive --dest ~/backup --accept-new
+
+# On the sender: preview first (shows what would transfer/skip/delete).
+laptoplink sync ./project --to 192.168.1.50 --dry-run --delete
+
+# Then do it for real. --delete prompts before removing extras (--yes skips).
+laptoplink sync ./project --to 192.168.1.50 --delete --exclude '*.tmp'
+```
+
+Unchanged files are skipped (by size + mtime, or `--checksum` for content).
+Re-running a sync after a small edit is cheap. For a big file that changed only
+a little, add `--delta`: LaptopLink sends just the differing blocks. In testing,
+a ~2 KB edit to a 20 MB file re-synced by transferring **4.4 KiB** instead of
+the whole file — verified end-to-end by its whole-file hash before commit.
+
+Deletion is never the default and only happens after every transfer succeeds;
+excluded paths are protected from it.
+
 ## Command reference
 
 ```
@@ -169,6 +194,9 @@ laptoplink device revoke --fingerprint FP   Stop trusting a device
 
 laptoplink send PATH... --to ADDR           Send files/folders to a device
             [--chunk-size BYTES] [--id ID]
+laptoplink sync SRC_DIR --to ADDR           One-way sync a directory's contents
+            [--dry-run] [--delete] [--exclude GLOB]...
+            [--checksum] [--delta] [--yes]
 laptoplink receive [--dest DIR]             Listen for incoming transfers
             [--bind ADDR] [--accept-new] [--once]
 
@@ -265,7 +293,7 @@ are committed to the repo.
 |------:|------|-------|
 | 1 | Architecture & threat model | ✅ done |
 | 2 | Secure local CLI engine (this) | ✅ done |
-| 3 | Resume polish, one-way sync, rsync-style delta transfer | 🟡 partial |
+| 3 | Resume polish, one-way sync, rsync-style delta transfer | ✅ done (core) |
 | 4 | Desktop app (Tauri + React/TypeScript) | ⬜ planned |
 | 5 | Internet: signaling, NAT traversal, encrypted relay, QUIC eval | ⬜ planned |
 | 6 | Web app (Next.js + TypeScript) with documented browser limits | ⬜ planned |

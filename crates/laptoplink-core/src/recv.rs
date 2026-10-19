@@ -12,6 +12,7 @@
 
 use crate::chunk;
 use crate::config::Config;
+use crate::delta;
 use crate::error::{Error, Result};
 use crate::fsutil;
 use crate::identity::DeviceIdentity;
@@ -186,6 +187,7 @@ fn handle_connection(
             delete,
             dry_run,
             checksum,
+            delta,
             excludes,
         } => handle_sync(
             config,
@@ -198,6 +200,7 @@ fn handle_connection(
             delete,
             dry_run,
             checksum,
+            delta,
             excludes,
         ),
         other => Err(Error::protocol(format!(
@@ -324,6 +327,7 @@ fn handle_offer(
             file_index,
             needed,
             resume,
+            delta: false,
         });
     }
     manifest.save()?;
@@ -355,6 +359,7 @@ fn handle_sync(
     delete: bool,
     dry_run: bool,
     checksum: bool,
+    delta_enabled: bool,
     excludes: Vec<String>,
 ) -> Result<()> {
     check_limits(&files, &config.limits)?;
@@ -371,27 +376,31 @@ fn handle_sync(
         let dest_path = pathsafety::safe_join(&opts.dest, &f.rel_path)?;
         let count = chunk::chunk_count(f.size, f.chunk_size);
 
-        // Compare against the actual destination file to decide skip vs send.
-        let needed = match std::fs::symlink_metadata(&dest_path) {
+        // Compare against the actual destination file to decide skip vs send,
+        // and whether a changed-but-present file is eligible for delta.
+        let (needed, use_delta) = match std::fs::symlink_metadata(&dest_path) {
             Ok(meta) if meta.file_type().is_symlink() => {
                 conflicts.push(format!("{}: destination is a symlink; skipped", f.rel_path));
-                ChunkSelection::None
+                (ChunkSelection::None, false)
             }
             Ok(meta) if meta.is_dir() => {
                 conflicts.push(format!(
                     "{}: destination is a directory; skipped",
                     f.rel_path
                 ));
-                ChunkSelection::None
+                (ChunkSelection::None, false)
             }
             Ok(meta) if meta.is_file() => {
                 if files_identical(&dest_path, &meta, f, checksum) {
-                    ChunkSelection::None
+                    (ChunkSelection::None, false)
                 } else {
-                    ChunkSelection::All
+                    // Exists but differs: eligible for delta if enabled and
+                    // the file is large enough to be worth signing.
+                    let d = delta_enabled && f.size >= delta::MIN_DELTA_FILE;
+                    (ChunkSelection::All, d)
                 }
             }
-            _ => ChunkSelection::All, // not found -> new file
+            _ => (ChunkSelection::All, false), // not found -> new file, no basis
         };
 
         if matches!(needed, ChunkSelection::All) {
@@ -418,6 +427,7 @@ fn handle_sync(
             file_index,
             needed,
             resume: false,
+            delta: use_delta,
         });
     }
 
@@ -583,6 +593,7 @@ fn run_receive_loop(
     let mut bytes_written: u64 = 0;
     let mut open_file: Option<(u32, std::fs::File)> = None;
     let mut since_checkpoint: u64 = 0;
+    let mut delta_recv: Option<DeltaRecv> = None;
 
     loop {
         let msg = protocol::read_control(secure, config.limits.max_message_bytes)?;
@@ -652,6 +663,126 @@ fn run_receive_loop(
                     }
                 }
                 let result = finalize_file(dest, manifest, file_index, &file_hash);
+                manifest.save()?;
+                match result {
+                    Ok(rel_path) => {
+                        protocol::write_control(
+                            secure,
+                            &Control::FileResult {
+                                file_index,
+                                ok: true,
+                                error: String::new(),
+                            },
+                        )?;
+                        sink.on_event(ProgressEvent::FileCompleted {
+                            file_index,
+                            rel_path,
+                        });
+                    }
+                    Err(e) => {
+                        protocol::write_control(
+                            secure,
+                            &Control::FileResult {
+                                file_index,
+                                ok: false,
+                                error: e.to_string(),
+                            },
+                        )?;
+                    }
+                }
+            }
+
+            // --- Delta transfer (basis = existing destination file) --------
+            Control::DeltaRequest { file_index } => {
+                let rf = manifest
+                    .file_mut(file_index)
+                    .ok_or_else(|| Error::protocol("DeltaRequest for unknown file index"))?;
+                let rel = rf.rel_path.clone();
+                let part_path = rf.part_path.clone();
+                let basis_path = pathsafety::safe_join(dest, &rel)?;
+                let basis_len = std::fs::metadata(&basis_path)?.len();
+                let block_size = delta::block_size_for(basis_len);
+                let sigs = delta::signatures_file(&basis_path, block_size)?;
+                let wire: Vec<(u32, String)> =
+                    sigs.into_iter().map(|s| (s.weak, s.strong)).collect();
+                protocol::write_control(
+                    secure,
+                    &Control::DeltaSignatures {
+                        file_index,
+                        block_size,
+                        sigs: wire,
+                    },
+                )?;
+                // Close any open chunk file; open basis (read) + fresh part.
+                if let Some((_, f)) = open_file.take() {
+                    fsutil::sync_file(&f)?;
+                }
+                let basis = std::fs::File::open(&basis_path)?;
+                let part = fsutil::create_part_file(&part_path)?;
+                delta_recv = Some(DeltaRecv {
+                    file_index,
+                    basis,
+                    part,
+                    part_path,
+                    block_size,
+                });
+            }
+
+            Control::DeltaCopy {
+                file_index,
+                start_block,
+                count,
+            } => {
+                let d = delta_recv
+                    .as_mut()
+                    .filter(|d| d.file_index == file_index)
+                    .ok_or_else(|| Error::protocol("DeltaCopy without matching DeltaRequest"))?;
+                let bs = d.block_size as u64;
+                d.basis
+                    .seek(SeekFrom::Start(start_block.saturating_mul(bs)))?;
+                let mut buf = vec![0u8; d.block_size as usize];
+                for _ in 0..count {
+                    let n = read_up_to(&mut d.basis, &mut buf)?;
+                    if n == 0 {
+                        return Err(Error::Integrity("delta copy past end of basis".into()));
+                    }
+                    d.part.write_all(&buf[..n])?;
+                }
+            }
+
+            Control::DeltaLiteral { file_index, len } => {
+                if len as usize > config.limits.max_chunk_bytes {
+                    return Err(Error::LimitExceeded(format!(
+                        "delta literal {len} too large"
+                    )));
+                }
+                let d = delta_recv
+                    .as_mut()
+                    .filter(|d| d.file_index == file_index)
+                    .ok_or_else(|| Error::protocol("DeltaLiteral without matching DeltaRequest"))?;
+                if payload.len() < len as usize {
+                    payload.resize(len as usize, 0);
+                }
+                read_exact(secure, &mut payload[..len as usize])?;
+                d.part.write_all(&payload[..len as usize])?;
+                bytes_written += len as u64;
+                sink.on_event(ProgressEvent::Progress {
+                    file_index,
+                    delta_bytes: len as u64,
+                });
+            }
+
+            Control::DeltaDone {
+                file_index,
+                file_hash,
+            } => {
+                let d = delta_recv
+                    .take()
+                    .filter(|d| d.file_index == file_index)
+                    .ok_or_else(|| Error::protocol("DeltaDone without matching DeltaRequest"))?;
+                d.part.sync_all()?;
+                drop(d.basis);
+                let result = finalize_delta(dest, manifest, file_index, &d.part_path, &file_hash);
                 manifest.save()?;
                 match result {
                     Ok(rel_path) => {
@@ -764,6 +895,69 @@ fn finalize_file(
 
     rf.committed = true;
     Ok(rf.rel_path.clone())
+}
+
+/// In-flight state while reconstructing one file from a delta stream.
+struct DeltaRecv {
+    file_index: u32,
+    /// The existing destination file, read as the copy basis.
+    basis: std::fs::File,
+    /// The new file being assembled.
+    part: std::fs::File,
+    part_path: PathBuf,
+    block_size: u32,
+}
+
+/// Finalize a delta-reconstructed file: verify its whole-file hash, then
+/// atomically commit (symlink-guarded, mtime-preserving). On mismatch the part
+/// file is discarded so a retry starts clean.
+fn finalize_delta(
+    dest_root: &Path,
+    manifest: &mut ReceiverManifest,
+    file_index: u32,
+    part_path: &Path,
+    expected_hash: &str,
+) -> Result<String> {
+    let rf = manifest
+        .file_mut(file_index)
+        .ok_or_else(|| Error::protocol("DeltaDone for unknown file index"))?;
+    rf.expected_file_hash = Some(expected_hash.to_string());
+
+    let got = hash_whole_file(part_path)?;
+    if got != expected_hash {
+        let _ = std::fs::remove_file(part_path);
+        return Err(Error::Integrity(format!(
+            "delta reconstruction hash mismatch for '{}'",
+            rf.rel_path
+        )));
+    }
+
+    let dest_path = pathsafety::safe_join(dest_root, &rf.rel_path)?;
+    guard_symlink(&dest_path)?;
+    if let Some(parent) = dest_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    fsutil::atomic_rename(part_path, &dest_path)?;
+    if let Some(secs) = rf.src_mtime {
+        if let Ok(f) = std::fs::File::options().write(true).open(&dest_path) {
+            let _ = f.set_modified(UNIX_EPOCH + Duration::from_secs(secs));
+        }
+    }
+    rf.committed = true;
+    Ok(rf.rel_path.clone())
+}
+
+/// Read up to `buf.len()` bytes; returns bytes read (short only at EOF).
+fn read_up_to<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        let n = r.read(&mut buf[filled..])?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+    Ok(filled)
 }
 
 /// A file's mtime in whole Unix seconds, if the platform/filesystem reports it.

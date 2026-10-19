@@ -52,6 +52,7 @@ fn opts(delete: bool, dry_run: bool, excludes: Vec<String>) -> sync::SyncOptions
         delete,
         dry_run,
         checksum: false,
+        delta: false,
         excludes,
         chunk_size: None,
         device_name: "sender".into(),
@@ -261,6 +262,60 @@ fn exclude_filters_source_and_protects_destination() {
 }
 
 #[test]
+fn delta_resends_only_changed_region() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (scfg, sid) = make_identity(&tmp.path().join("s"), "sender");
+    let (rcfg, rid) = make_identity(&tmp.path().join("r"), "receiver");
+
+    // A file large enough to trigger delta; dest starts with an older copy.
+    let mut v1 = vec![0u8; 1024 * 1024];
+    let mut seed: u32 = 0xC0FFEE;
+    for b in v1.iter_mut() {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        *b = (seed & 0xff) as u8;
+    }
+    let src = tmp.path().join("src");
+    let dest = tmp.path().join("dest");
+    // Seed the destination with v1 so it can serve as the delta basis.
+    write_file(&dest.join("big.bin"), &v1);
+
+    // v2: same as v1 except ~1 KiB changed in the middle.
+    let mut v2 = v1.clone();
+    for byte in v2.iter_mut().skip(500_000).take(1024) {
+        *byte = byte.wrapping_add(1);
+    }
+    write_file(&src.join("big.bin"), &v2);
+
+    // Use checksum comparison so the test triggers delta deterministically
+    // regardless of same-second mtimes (size+mtime would otherwise match).
+    let delta_opts = sync::SyncOptions {
+        delete: false,
+        dry_run: false,
+        checksum: true,
+        delta: true,
+        excludes: vec![],
+        chunk_size: None,
+        device_name: "sender".into(),
+    };
+    let (addr, h) = spawn_receiver(&rcfg, &rid, &dest);
+    let s = sync::sync(&scfg, &sid, &addr, &src, delta_opts, &mut NullSink).unwrap();
+    h.join().unwrap().unwrap();
+
+    // The destination must now exactly equal v2 (verified by whole-file hash).
+    assert_eq!(fs::read(dest.join("big.bin")).unwrap(), v2);
+    assert_eq!(s.files_transferred, 1);
+    // Delta must transmit far less than the whole 4 MiB file.
+    assert!(
+        s.bytes_transferred < v2.len() as u64 / 4,
+        "delta should send a small fraction of the file, sent {} of {}",
+        s.bytes_transferred,
+        v2.len()
+    );
+}
+
+#[test]
 fn checksum_mode_skips_when_content_matches() {
     let tmp = tempfile::tempdir().unwrap();
     let (scfg, sid) = make_identity(&tmp.path().join("s"), "sender");
@@ -276,6 +331,7 @@ fn checksum_mode_skips_when_content_matches() {
         delete: false,
         dry_run: false,
         checksum: true,
+        delta: false,
         excludes: vec![],
         chunk_size: None,
         device_name: "sender".into(),

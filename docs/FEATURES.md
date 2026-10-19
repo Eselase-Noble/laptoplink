@@ -44,15 +44,21 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 - ⬜ Bandwidth rate-limiting flag
 - ⬜ Exclusion/inclusion patterns on send
 
-## Phase 3 — Resume, sync & delta 🟡
+## Phase 3 — Resume, sync & delta ✅ (core)
 - ✅ Persistent manifests & verified-chunk reuse (from Phase 2)
-- 🟡 One-way directory sync — basic "skip identical / resume" exists; full sync
-     (metadata compare, dry-run, exclude patterns, safe deletion) not yet
-- ⬜ Dry-run mode (`sync --dry-run`)
-- ⬜ Safe deletion policy (`sync --delete` with confirmation)
-- ⬜ Rolling-checksum + strong-hash delta transfer for modified files
-- ⬜ Conflict detection
-- ⬜ Published comparisons vs rsync under equal settings
+- ✅ One-way directory sync (`laptoplink sync`)
+- ✅ Skip-identical by size + mtime (mtime preserved on commit) or `--checksum`
+- ✅ Dry-run mode (`sync --dry-run`) with no side effects
+- ✅ Exclude patterns (`--exclude GLOB`, repeatable; also protect from delete)
+- ✅ Safe deletion policy (`sync --delete`, confirmation-gated, post-transfer)
+- ✅ Conflict detection (dest is a dir/symlink where a file is expected)
+- ✅ Rolling-checksum + strong-hash (BLAKE3) delta transfer for changed files
+      (`sync --delta`), with whole-file verification before commit and a size
+      threshold below which full transfer is used
+- ⬜ Two-way sync (deliberately deferred; conflict/deletion semantics)
+- ⬜ Published, reproducible comparisons vs rsync under equal settings
+- ⬜ Delta fallback heuristic when delta would send more than a full transfer
+      (today delta is opt-in per run and gated by a minimum file size)
 
 ## Phase 4 — Desktop app (Tauri + React/TS) ⬜
 - ⬜ Tauri shell wrapping the core `Engine`
