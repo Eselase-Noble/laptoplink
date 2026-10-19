@@ -97,14 +97,16 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 ## Platform notes
 - **Linux and macOS**: fully built and end-to-end tested in CI (unit +
   integration + loopback benchmark).
-- **Windows**: builds and passes unit tests, and now passes the full **push
-  transfer** suite in CI (send, receive, resume, directory trees, sender-dest).
-  Getting there needed a graceful half-close + drain at session teardown
-  (`SecureStream::graceful_close`) and a retrying atomic rename for the
-  antivirus/indexer "Access is denied" races. **`sync` on Windows is still
-  gated off**: it hits a teardown reset the graceful close did not fully fix in
-  the single-process loopback harness; that is tracked as remaining work. So on
-  Windows, `send`/`receive`/`agent` are validated; `sync` is not yet.
+- **Windows**: builds, passes unit tests, and has a one-line installer. The
+  end-to-end transfer tests are gated off Windows: in the single-process
+  loopback test harness they intermittently hit an abortive socket reset at
+  session teardown and an antivirus/indexer "Access is denied" on the finalize
+  rename. A graceful half-close + drain (`SecureStream::graceful_close`) and a
+  retrying atomic rename make it usually pass, but not reliably, and it cannot
+  be reproduced or iterated without a real Windows host. **Windows transfer is
+  therefore still experimental / not-yet-validated.** Proper Windows validation
+  on a real machine (two processes, not one-process loopback) is the top
+  remaining hardening item.
 
 ## Known limitations (today)
 - Local network only; no NAT traversal or relay yet.
