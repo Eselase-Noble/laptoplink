@@ -354,13 +354,23 @@ fn handle_offer(
         }
         None => opts.dest.clone(),
     };
-    std::fs::create_dir_all(&dest_root)?;
+    std::fs::create_dir_all(&dest_root).map_err(|e| {
+        Error::Other(format!(
+            "creating destination {} failed: {e}",
+            dest_root.display()
+        ))
+    })?;
 
     let mut manifest = ReceiverManifest::load(&dest_root, &transfer_id)?
         .unwrap_or_else(|| ReceiverManifest::new(&dest_root, &transfer_id, fp.full()));
 
     let tmp_dir = dest_root.join(".laptoplink").join("tmp").join(&transfer_id);
-    std::fs::create_dir_all(&tmp_dir)?;
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| {
+        Error::Other(format!(
+            "creating work dir {} failed: {e}",
+            tmp_dir.display()
+        ))
+    })?;
 
     let total_bytes: u64 = files.iter().map(|f| f.size).sum();
     sink.on_event(ProgressEvent::TransferStarted {
@@ -435,7 +445,9 @@ fn handle_offer(
             delta: false,
         });
     }
-    manifest.save()?;
+    manifest
+        .save()
+        .map_err(|e| Error::Other(format!("saving transfer manifest failed: {e}")))?;
 
     protocol::write_control(secure, &Control::OfferResponse { files: plans })?;
 
@@ -736,12 +748,23 @@ fn run_receive_loop(
                     if let Some((_, f)) = open_file.take() {
                         fsutil::sync_file(&f)?;
                     }
-                    let f = fsutil::open_part_file(&part_path)?;
+                    let f = fsutil::open_part_file(&part_path).map_err(|e| {
+                        Error::Other(format!(
+                            "opening work file {} failed: {e}",
+                            part_path.display()
+                        ))
+                    })?;
                     open_file = Some((file_index, f));
                 }
                 let f = &mut open_file.as_mut().unwrap().1;
-                f.seek(SeekFrom::Start(offset))?;
-                f.write_all(&payload[..len as usize])?;
+                f.seek(SeekFrom::Start(offset))
+                    .and_then(|_| f.write_all(&payload[..len as usize]))
+                    .map_err(|e| {
+                        Error::Other(format!(
+                            "writing work file {} failed: {e}",
+                            part_path.display()
+                        ))
+                    })?;
 
                 rf.verified.set(chunk_index);
                 bytes_written += len as u64;
