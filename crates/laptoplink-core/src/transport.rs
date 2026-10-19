@@ -176,6 +176,28 @@ impl SecureStream {
         self.read_pos = 0;
         Ok(())
     }
+
+    /// Close the connection gracefully.
+    ///
+    /// Half-closes our write direction (sends a FIN) and then drains inbound
+    /// bytes until the peer's FIN (EOF). When both sides do this at the end of
+    /// a session, neither closes with data still in flight, which avoids the
+    /// abortive reset (WSAECONNRESET) Windows raises if a socket with unsent or
+    /// unread data is simply dropped. Best-effort: errors are ignored.
+    pub fn graceful_close(&mut self) {
+        let _ = self.writer.flush();
+        let _ = self.socket.shutdown(std::net::Shutdown::Write);
+        let _ = self
+            .socket
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let mut buf = [0u8; 256];
+        loop {
+            match self.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => continue,
+            }
+        }
+    }
 }
 
 impl Read for SecureStream {

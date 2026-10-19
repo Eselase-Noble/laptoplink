@@ -208,6 +208,10 @@ pub fn sync(
         bytes_skipped: 0,
     });
 
+    // Graceful shutdown so neither side drops the socket with data in flight
+    // (avoids a Windows abortive reset on the final exchange).
+    secure.graceful_close();
+
     Ok(SyncSummary {
         dry_run: opts.dry_run,
         files_total,
