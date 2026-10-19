@@ -97,16 +97,14 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 ## Platform notes
 - **Linux and macOS**: fully built and end-to-end tested in CI (unit +
   integration + loopback benchmark).
-- **Windows**: builds, passes unit tests, and has a one-line installer. The
-  end-to-end transfer tests are gated off Windows: in the single-process
-  loopback test harness they intermittently hit an abortive socket reset at
-  session teardown and an antivirus/indexer "Access is denied" on the finalize
-  rename. A graceful half-close + drain (`SecureStream::graceful_close`) and a
-  retrying atomic rename make it usually pass, but not reliably, and it cannot
-  be reproduced or iterated without a real Windows host. **Windows transfer is
-  therefore still experimental / not-yet-validated.** Proper Windows validation
-  on a real machine (two processes, not one-process loopback) is the top
-  remaining hardening item.
+- **Windows**: fully supported and validated in CI. The end-to-end push and
+  sync transfer suites now run on Windows (alongside Linux/macOS). Getting there
+  took two Windows-specific fixes: a graceful half-close + drain at session
+  teardown (`SecureStream::graceful_close`), and — the real blocker — fsyncing
+  durable writes on the original write handle instead of reopening the file
+  read-only (on Windows `FlushFileBuffers` on a read-only handle returns
+  ERROR_ACCESS_DENIED, which failed every transfer at the manifest-save step).
+  A one-line PowerShell installer and native desktop installer are provided.
 
 ## Known limitations (today)
 - Local network only; no NAT traversal or relay yet.
