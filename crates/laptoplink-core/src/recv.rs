@@ -459,6 +459,7 @@ fn handle_sync(
             other => return Err(Error::protocol(format!("expected Complete, got {other:?}"))),
         }
         protocol::write_control(secure, &Control::SyncComplete { deleted: 0 })?;
+        linger_until_close(secure);
         return Ok(());
     }
 
@@ -493,7 +494,21 @@ fn handle_sync(
         bytes_transferred: bytes,
         bytes_skipped: transfer_bytes_total.saturating_sub(bytes),
     });
+    linger_until_close(secure);
     Ok(())
+}
+
+/// Wait for the peer to close the connection before we do.
+///
+/// After we send the final `SyncComplete`, the sender reads it and then hangs
+/// up. If we closed first with the sender still mid-read, Windows turns the
+/// close into a TCP reset (WSAECONNRESET) and the sender's read fails. Reading
+/// here until EOF makes us close last, which is clean on every platform.
+fn linger_until_close(secure: &mut transport::SecureStream) {
+    let _ = secure.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+    let mut scratch = [0u8; 64];
+    let _ = secure.read(&mut scratch);
+    let _ = secure.set_read_timeout(None);
 }
 
 /// Is the destination file already identical to the offered source file?

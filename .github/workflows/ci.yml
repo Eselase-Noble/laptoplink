@@ -45,5 +45,5 @@ jobs:
       - name: Test
         run: cargo test --workspace --verbose
       - name: Smoke test (loopback benchmark)
-        run: cargo run --release -p laptoplink-cli -- --home ./.ll-ci benchmark --size-mib 32
+        run: cargo run --release --bin laplink -- --home ./.ll-ci benchmark --size-mib 32
         shell: bash
