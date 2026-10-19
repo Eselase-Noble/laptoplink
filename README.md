@@ -52,8 +52,16 @@ written. Again, the full status lives in `docs/FEATURES.md`.
 
 ## Install
 
-The short command is `laplink`. The longer `laptoplink` is kept as an alias, so
-either name works everywhere.
+There are two ways to run LaptopLink: a **desktop app** (a window with
+drag-and-drop) and the **command line**.
+
+**Desktop app** — download an installer from the
+[latest release](https://github.com/Eselase-Noble/laptoplink/releases/latest):
+macOS `.dmg`, Windows `.exe`/`.msi`, Ubuntu/Debian `.deb`, Fedora/RHEL `.rpm`,
+or a universal Linux `.AppImage`.
+
+**Command line** — the short command is `laplink` (with `laptoplink` kept as an
+alias, so either name works everywhere).
 
 The quickest way, with no Rust toolchain, is the install script. It grabs the
 latest prebuilt release for your OS and architecture:

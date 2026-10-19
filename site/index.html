@@ -150,6 +150,8 @@
 
   /* ---- download ---- */
   .inlinecode{font-family:var(--mono);font-size:0.92em;background:var(--paper);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+  .dl-h{font-family:var(--disp);font-weight:600;font-size:18px;margin:0 0 14px}
+  #dlVersion{font-family:var(--mono);font-size:13px;color:var(--mut)}
   .dl{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:22px}
   .dl-primary{font-size:17px;padding:16px 26px}
   .dl-ver{font-family:var(--mono);font-size:13px;color:var(--mut)}
@@ -334,41 +336,39 @@
 <section class="install" id="download">
   <div class="wrap">
     <h2>Download</h2>
-    <p class="lede">Grab the build for your computer. It is a single binary, <strong>laplink</strong>, with no Rust toolchain needed. Already installed? Update any time with <code class="inlinecode">laplink update</code>.</p>
+    <p class="lede">Two ways to run LaptopLink: the <strong>desktop app</strong> (a window with drag-and-drop), or the <strong>command line</strong> (a single <code class="inlinecode">laplink</code> binary). <span id="dlVersion">v0.1.1</span>.</p>
 
+    <h3 class="dl-h">Desktop app</h3>
     <div class="dl">
       <a class="dl-primary btn primary" id="dlPrimary" href="https://github.com/Eselase-Noble/laptoplink/releases/latest">
-        <span id="dlPrimaryLabel">Download</span>
+        <span id="dlPrimaryLabel">Download the app</span>
       </a>
-      <span class="dl-ver" id="dlVersion">v0.1.0</span>
     </div>
-
     <div class="dl-all">
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-aarch64-apple-darwin.tar.gz">macOS · Apple Silicon</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-x86_64-apple-darwin.tar.gz">macOS · Intel</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-x86_64-unknown-linux-gnu.tar.gz">Linux · x86-64</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-x86_64-pc-windows-msvc.zip">Windows · x86-64</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_aarch64.dmg">macOS · .dmg (Apple Silicon)</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_x64-setup.exe">Windows · .exe</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_amd64.deb">Ubuntu / Debian · .deb</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_amd64.AppImage">Linux · .AppImage</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink-0.1.1-1.x86_64.rpm">Fedora / RHEL · .rpm</a>
     </div>
 
-    <details class="dl-script">
-      <summary>Prefer a one-line install?</summary>
-      <div class="term small" style="margin-top:14px">
-        <div class="bar"><i></i><i></i><i></i><span class="lbl">macOS &amp; Linux</span></div>
-        <div class="body">
-          <span class="sigil">$</span>
-          <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
-          <button id="copy">Copy</button>
-        </div>
+    <h3 class="dl-h" style="margin-top:34px">Command line</h3>
+    <div class="term small">
+      <div class="bar"><i></i><i></i><i></i><span class="lbl">macOS &amp; Linux</span></div>
+      <div class="body">
+        <span class="sigil">$</span>
+        <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
+        <button id="copy">Copy</button>
       </div>
-      <div class="term small" style="margin-top:12px">
-        <div class="bar"><i></i><i></i><i></i><span class="lbl">Windows · PowerShell</span></div>
-        <div class="body">
-          <span class="sigil">&gt;</span>
-          <code>irm https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.ps1 | iex</code>
-        </div>
+    </div>
+    <div class="term small" style="margin-top:12px">
+      <div class="bar"><i></i><i></i><i></i><span class="lbl">Windows · PowerShell</span></div>
+      <div class="body">
+        <span class="sigil">&gt;</span>
+        <code>irm https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.ps1 | iex</code>
       </div>
-      <p class="cmd-note" style="margin-top:12px">Each installs <code>laplink</code> (and the <code>laptoplink</code> alias) and adds it to your PATH. Update later with <code>laplink update</code>.</p>
-    </details>
+    </div>
+    <p class="cmd-note" style="margin-top:12px">Installs <code>laplink</code> (and the <code>laptoplink</code> alias) and adds it to your PATH. Update later with <code>laplink update</code>. Prefer a direct binary? They're on the <a href="https://github.com/Eselase-Noble/laptoplink/releases/latest" style="border-bottom:1px solid var(--ink)">releases page</a>.</p>
   </div>
 </section>
 
@@ -456,9 +456,10 @@ laplink doctor                      check identity, port, and setup</pre>
     if(navigator.clipboard){ navigator.clipboard.writeText(t).then(()=>{ this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1400); }); }
   });
 
-  // Point the big download button at the right build for the visitor's OS.
+  // Point the big "Download the app" button at the desktop installer for the
+  // visitor's OS.
   (function(){
-    var V = "v0.1.0";
+    var V = "v0.1.1";
     var base = "https://github.com/Eselase-Noble/laptoplink/releases/download/" + V + "/";
     var ua = navigator.userAgent || "";
     var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
@@ -467,11 +468,11 @@ laplink doctor                      check identity, port, and setup</pre>
     if (!btn || !lbl) return;
     var asset = null, label = null;
     if (/Win/i.test(plat) || /Windows/i.test(ua)) {
-      asset = "laplink-" + V + "-x86_64-pc-windows-msvc.zip"; label = "Download for Windows";
+      asset = "LaptopLink_0.1.1_x64-setup.exe"; label = "Download for Windows";
     } else if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) {
-      asset = "laplink-" + V + "-aarch64-apple-darwin.tar.gz"; label = "Download for macOS (Apple Silicon)";
+      asset = "LaptopLink_0.1.1_aarch64.dmg"; label = "Download for macOS";
     } else if (/Linux/i.test(plat) || /Linux/i.test(ua)) {
-      asset = "laplink-" + V + "-x86_64-unknown-linux-gnu.tar.gz"; label = "Download for Linux";
+      asset = "LaptopLink_0.1.1_amd64.AppImage"; label = "Download for Linux";
     }
     if (asset) { btn.href = base + asset; lbl.textContent = label; }
   })();
