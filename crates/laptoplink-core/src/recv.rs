@@ -450,7 +450,7 @@ fn handle_sync(
     )?;
 
     if dry_run {
-        // No changes on either side; just drain the sender's Complete.
+        // No changes on either side; the sender's `Complete` is the last word.
         match protocol::read_control(secure, config.limits.max_message_bytes)? {
             Control::Complete => {}
             Control::Error { message } => {
@@ -458,8 +458,6 @@ fn handle_sync(
             }
             other => return Err(Error::protocol(format!("expected Complete, got {other:?}"))),
         }
-        protocol::write_control(secure, &Control::SyncComplete { deleted: 0 })?;
-        secure.graceful_close();
         return Ok(());
     }
 
@@ -488,13 +486,12 @@ fn handle_sync(
     let _ = std::fs::remove_file(ReceiverManifest::manifest_path(&opts.dest, &sync_id));
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
-    protocol::write_control(secure, &Control::SyncComplete { deleted })?;
+    let _ = deleted; // reported by the sender from its plan; kept for clarity
     sink.on_event(ProgressEvent::TransferCompleted {
         transfer_id: sync_id,
         bytes_transferred: bytes,
         bytes_skipped: transfer_bytes_total.saturating_sub(bytes),
     });
-    secure.graceful_close();
     Ok(())
 }
 

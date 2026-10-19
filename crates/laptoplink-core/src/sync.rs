@@ -190,16 +190,17 @@ pub fn sync(
         }
     }
 
+    // `Complete` is the sender's last action, mirroring the push protocol: the
+    // sender never reads after it, so neither side tears the socket down with a
+    // pending read (which Windows turns into an abortive reset). The receiver
+    // performs any deletions after reading `Complete`. The reported deletion
+    // count is the receiver's plan (what it will remove when `--delete` is set).
     protocol::write_control(&mut secure, &Control::Complete)?;
 
-    // Receiver reports how many files it deleted (0 in dry-run / without delete).
-    let deleted = match protocol::read_control(&mut secure, config.limits.max_message_bytes)? {
-        Control::SyncComplete { deleted } => deleted,
-        other => {
-            return Err(Error::protocol(format!(
-                "expected SyncComplete, got {other:?}"
-            )))
-        }
+    let deleted = if opts.delete {
+        deletions.len() as u64
+    } else {
+        0
     };
 
     sink.on_event(ProgressEvent::TransferCompleted {
@@ -207,10 +208,6 @@ pub fn sync(
         bytes_transferred,
         bytes_skipped: 0,
     });
-
-    // Graceful shutdown so neither side drops the socket with data in flight
-    // (avoids a Windows abortive reset on the final exchange).
-    secure.graceful_close();
 
     Ok(SyncSummary {
         dry_run: opts.dry_run,

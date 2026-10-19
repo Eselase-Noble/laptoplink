@@ -95,8 +95,6 @@ pub enum Control {
         deletions: Vec<String>,
         conflicts: Vec<String>,
     },
-    /// Receiver's final message after a sync: how many files it deleted.
-    SyncComplete { deleted: u64 },
 
     // --- Delta transfer (Phase 3) ----------------------------------------
     /// Sender asks the receiver for block signatures of its existing copy.
