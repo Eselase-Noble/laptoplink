@@ -35,6 +35,10 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 - ✅ Stable exit codes, `--quiet`, `--verbose`, configurable chunk size
 - ✅ CLI: `device {show,list,pair,revoke}`, `send`, `receive`,
       `transfer {list,status,resume,cancel}`, `benchmark`, `doctor`
+- ✅ `send --dest` with receiver `--allow-sender-dest` (sender-chosen
+      destination directory, opt-in for safety)
+- ✅ Background agent: `agent {start,stop,status}` — an always-on receiver that
+      runs detached and survives closing the terminal (stop it with `agent stop`)
 - ✅ Real two-process transfers + SHA-256-verified integration tests
 - 🟡 64-bit offsets & overflow-checked arithmetic — used throughout; more
       property tests wanted

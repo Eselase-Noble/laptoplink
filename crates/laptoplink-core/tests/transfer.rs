@@ -216,6 +216,67 @@ fn sender_dest_is_honored_only_when_allowed() {
 }
 
 #[test]
+fn concurrent_receive_from_two_senders() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (rcfg, rid) = make_identity(&tmp.path().join("receiver"), "receiver");
+    let (s1cfg, s1id) = make_identity(&tmp.path().join("s1"), "s1");
+    let (s2cfg, s2id) = make_identity(&tmp.path().join("s2"), "s2");
+
+    // Pre-pair both senders so the concurrent transfers don't race on the
+    // peer store (that is a separate accept-new concern).
+    let mut peers = rcfg.load_peers().unwrap();
+    peers.approve(&s1id.fingerprint(), "s1").unwrap();
+    peers.approve(&s2id.fingerprint(), "s2").unwrap();
+
+    let dest = tmp.path().join("dest");
+    let f1 = tmp.path().join("src/one.bin");
+    let f2 = tmp.path().join("src/two.bin");
+    write_test_file(&f1, 2 * 1024 * 1024 + 11);
+    write_test_file(&f2, 3 * 1024 * 1024 + 7);
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let opts = recv::ReceiveOptions {
+        dest: dest.clone(),
+        accept_new: false,
+        device_name: "receiver".into(),
+        once: false,
+        allow_sender_dest: false,
+    };
+    // Concurrent server on its own thread (loops forever; left running for the
+    // duration of the test process).
+    {
+        let rcfg = rcfg.clone();
+        thread::spawn(move || {
+            let _ = recv::serve_on_concurrent(listener, &rcfg, &rid, &opts, || Box::new(NullSink));
+        });
+    }
+
+    // Two senders transfer at the same time.
+    let a = addr.clone();
+    let h1 = thread::spawn(move || {
+        let items = send::expand_sources(std::slice::from_ref(&f1)).unwrap();
+        send::send(&s1cfg, &s1id, &a, items, send_opts(), &mut NullSink)
+    });
+    let b = addr.clone();
+    let h2 = thread::spawn(move || {
+        let items = send::expand_sources(std::slice::from_ref(&f2)).unwrap();
+        send::send(&s2cfg, &s2id, &b, items, send_opts(), &mut NullSink)
+    });
+    h1.join().unwrap().expect("sender 1");
+    h2.join().unwrap().expect("sender 2");
+
+    assert!(
+        dest.join("one.bin").exists(),
+        "file from sender 1 should arrive"
+    );
+    assert!(
+        dest.join("two.bin").exists(),
+        "file from sender 2 should arrive"
+    );
+}
+
+#[test]
 fn unpaired_peer_is_rejected() {
     let tmp = tempfile::tempdir().unwrap();
     let (scfg, sid) = make_identity(&tmp.path().join("sender"), "sender");

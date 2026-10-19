@@ -122,6 +122,26 @@ The receiver still has to be listening (like `scp` needs `sshd`), but after that
 the sender drives everything. Letting a sender write to an arbitrary folder is
 powerful, so it is off until the receiver opts in.
 
+### Always-on receiving (no terminal to keep open)
+
+If you do not want to leave `laplink receive` running in a terminal, start a
+background agent instead. It keeps listening after you close the terminal and
+survives until you stop it:
+
+```bash
+laplink agent start --accept-new --allow-sender-dest   # start, detached
+laplink agent status                                   # running? where?
+laplink agent stop                                     # stop it
+```
+
+With the agent running, the other machine just sends, one command, any time:
+
+```bash
+laplink send ./movie.mkv --to 192.168.1.50 --dest ~/Movies/incoming
+```
+
+The agent writes a small log you can tail (its path is shown by `agent status`).
+
 **No internet needed on the same network.** When both machines are on the same
 Wi-Fi or LAN, the transfer is direct over the local network and never touches
 the internet. No data plan, no cloud. It even works on a router or phone hotspot
@@ -227,6 +247,11 @@ laptoplink sync SRC_DIR --to ADDR           One way sync a folder's contents
 laptoplink receive [--dest DIR]             Listen for incoming transfers
             [--bind ADDR] [--accept-new] [--once]
             [--allow-sender-dest]           Let the sender choose the folder
+
+laplink agent start [--dest DIR]            Always-on background receiver
+            [--bind ADDR] [--accept-new] [--allow-sender-dest]
+laplink agent status                        Is the background receiver running?
+laplink agent stop                          Stop the background receiver
 
 laptoplink transfer list                    List known transfers
 laptoplink transfer status ID               Show one transfer

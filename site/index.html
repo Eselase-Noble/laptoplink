@@ -369,13 +369,22 @@
       <p class="cmd-note">Skips files already there; with <code>--delta</code>, a large file that changed a little moves in kilobytes. Add <code>--dry-run</code> to preview, <code>--delete</code> to mirror.</p>
     </div>
 
+    <div class="cmd">
+      <div class="cmd-label">Leave the receiver always on (no terminal to keep open)</div>
+      <div class="term small">
+        <div class="body"><span class="sigil">$</span><code>laplink agent start --accept-new --allow-sender-dest</code></div>
+      </div>
+      <p class="cmd-note">Runs a background receiver that keeps listening after you close the terminal. Check it with <code>agent status</code>, stop it with <code>agent stop</code>. With it running and <code>--allow-sender-dest</code>, the other machine sends in one command and picks the folder: <code>laplink send ./movie.mkv --to IP --dest ~/Movies</code>.</p>
+    </div>
+
     <details class="ref">
       <summary>All commands</summary>
       <pre>laplink device show                 show this machine's identity and fingerprint
 laplink device pair --fingerprint FP   trust another machine by its fingerprint
-laplink send PATH... --to ADDR      send files or folders
-laplink receive --dest DIR          listen for incoming transfers
+laplink send PATH... --to ADDR      send files or folders  [--dest DIR]
+laplink receive --dest DIR          listen for incoming transfers  [--accept-new --allow-sender-dest]
 laplink sync SRC --to ADDR          one-way folder sync  [--dry-run --delete --delta --exclude GLOB]
+laplink agent start | status | stop always-on background receiver
 laplink transfer list | resume ID   list or continue interrupted transfers
 laplink doctor                      check identity, port, and setup</pre>
     </details>
@@ -390,9 +399,9 @@ laplink doctor                      check identity, port, and setup</pre>
       <tr><td>01</td><td>Architecture and threat model</td><td><span class="pill on">done</span></td></tr>
       <tr><td>02</td><td>Secure local transfer engine (CLI)</td><td><span class="pill on">done</span></td></tr>
       <tr><td>03</td><td>Resume, folder sync, delta transfer</td><td><span class="pill on">done</span></td></tr>
-      <tr><td>04</td><td>Desktop app</td><td><span class="pill mid">in progress</span></td></tr>
+      <tr><td>04</td><td>Desktop app (runs; polishing)</td><td><span class="pill on">beta</span></td></tr>
       <tr><td>05</td><td>Transfers across the internet</td><td><span class="pill">next</span></td></tr>
-      <tr><td>06</td><td>Browser-based transfers</td><td><span class="pill mid">in progress</span></td></tr>
+      <tr><td>06</td><td>Browser-based transfers</td><td><span class="pill mid">later</span></td></tr>
     </table>
   </div>
 </section>

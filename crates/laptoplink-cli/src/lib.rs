@@ -72,6 +72,10 @@ enum Command {
     /// Receive files (run a listening server).
     Receive(ReceiveArgs),
 
+    /// Run a background receiver that is always listening (start/stop/status).
+    #[command(subcommand)]
+    Agent(AgentCmd),
+
     /// Inspect and control transfers.
     #[command(subcommand)]
     Transfer(TransferCmd),
@@ -81,6 +85,9 @@ enum Command {
 
     /// Diagnose the local environment and configuration.
     Doctor,
+
+    /// Update laplink to the latest released version.
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -111,9 +118,10 @@ struct SendArgs {
     #[arg(required = true, value_name = "PATH")]
     paths: Vec<PathBuf>,
 
-    /// Target device address: `host` or `host:port` (default port 9031).
-    #[arg(long = "to", value_name = "ADDR")]
-    to: String,
+    /// Target device address(es): `host` or `host:port` (default port 9031).
+    /// Repeat or comma-separate to send the same files to several devices.
+    #[arg(long = "to", value_name = "ADDR", required = true, num_args = 1.., value_delimiter = ',')]
+    to: Vec<String>,
 
     /// Override chunk size in bytes (otherwise chosen adaptively).
     #[arg(long)]
@@ -197,6 +205,39 @@ struct ReceiveArgs {
 }
 
 #[derive(Subcommand)]
+enum AgentCmd {
+    /// Start the background receiver. It keeps listening after you close the
+    /// terminal, until you run `agent stop` (or the machine restarts).
+    Start(AgentStartArgs),
+    /// Stop the running background receiver.
+    Stop,
+    /// Show whether the background receiver is running, and how.
+    Status,
+    /// Internal: the long-running receiver process launched by `agent start`.
+    #[command(hide = true)]
+    Run(AgentStartArgs),
+}
+
+#[derive(Args, Clone)]
+struct AgentStartArgs {
+    /// Destination directory for received files.
+    #[arg(long, value_name = "DIR")]
+    dest: Option<PathBuf>,
+
+    /// Address to bind: `host:port` (default 0.0.0.0:9031).
+    #[arg(long, value_name = "ADDR")]
+    bind: Option<String>,
+
+    /// Trust-on-first-use: auto-pair unknown peers.
+    #[arg(long)]
+    accept_new: bool,
+
+    /// Let the sender choose the destination directory (via `send --dest`).
+    #[arg(long)]
+    allow_sender_dest: bool,
+}
+
+#[derive(Subcommand)]
 enum TransferCmd {
     /// List known sender-side transfers.
     List,
@@ -243,10 +284,129 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         Command::Send(args) => run_send(cli, &config, args),
         Command::Sync(args) => run_sync(cli, &config, args),
         Command::Receive(args) => run_receive(cli, &config, args),
+        Command::Agent(cmd) => run_agent(cli, &config, cmd),
         Command::Transfer(cmd) => run_transfer(cli, &config, cmd),
         Command::Benchmark(args) => run_benchmark(cli, &config, args),
         Command::Doctor => run_doctor(cli, &config),
+        Command::Update => run_update(),
     }
+}
+
+/// The release target triple for this build, if auto-update supports it.
+fn current_target() -> Option<&'static str> {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        return Some("x86_64-unknown-linux-gnu");
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        return Some("aarch64-apple-darwin");
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        return Some("x86_64-apple-darwin");
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
+/// Download the latest release and replace the installed binaries in place.
+fn run_update() -> anyhow::Result<()> {
+    const REPO: &str = "Eselase-Noble/laptoplink";
+    if cfg!(windows) {
+        anyhow::bail!(
+            "on Windows, download the latest .zip from https://github.com/{REPO}/releases"
+        );
+    }
+    let target = current_target().ok_or_else(|| {
+        anyhow::anyhow!("auto-update is not supported on this platform; see the releases page")
+    })?;
+
+    // Find the latest tag via the GitHub API (uses system curl).
+    let out = std::process::Command::new("curl")
+        .args([
+            "-fsSL",
+            &format!("https://api.github.com/repos/{REPO}/releases/latest"),
+        ])
+        .output()
+        .context("running curl (is it installed?)")?;
+    if !out.status.success() {
+        anyhow::bail!("could not reach GitHub to check for updates");
+    }
+    let body = String::from_utf8_lossy(&out.stdout);
+    let tag = body
+        .lines()
+        .find(|l| l.trim_start().starts_with("\"tag_name\""))
+        .and_then(|l| l.split('"').nth(3))
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow::anyhow!("no published release found"))?;
+
+    let current = format!("v{}", env!("CARGO_PKG_VERSION"));
+    if tag == current {
+        println!("Already up to date ({current}).");
+        return Ok(());
+    }
+    println!("Updating {current} -> {tag} …");
+
+    let asset = format!("laplink-{tag}-{target}.tar.gz");
+    let url = format!("https://github.com/{REPO}/releases/download/{tag}/{asset}");
+    let tmp = std::env::temp_dir().join(format!("laplink-update-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp)?;
+    let tgz = tmp.join("pkg.tar.gz");
+
+    let st = std::process::Command::new("curl")
+        .args(["-fL", "--retry", "3", "-o"])
+        .arg(&tgz)
+        .arg(&url)
+        .status()
+        .context("downloading the release")?;
+    if !st.success() {
+        anyhow::bail!("download failed: {url}");
+    }
+    let st = std::process::Command::new("tar")
+        .arg("-xzf")
+        .arg(&tgz)
+        .arg("-C")
+        .arg(&tmp)
+        .status()
+        .context("extracting the release")?;
+    if !st.success() {
+        anyhow::bail!("could not extract the downloaded archive");
+    }
+
+    let extracted = tmp.join(format!("laplink-{tag}-{target}"));
+    let exe = std::env::current_exe().context("locating the installed binary")?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("cannot determine the install directory"))?;
+
+    // Replace both the short command and its alias, atomically within the dir.
+    for name in ["laplink", "laptoplink"] {
+        let src = extracted.join(name);
+        if !src.exists() {
+            continue;
+        }
+        let dst = dir.join(name);
+        let staged = dir.join(format!(".{name}.new"));
+        std::fs::copy(&src, &staged)
+            .and_then(|_| {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))?;
+                }
+                std::fs::rename(&staged, &dst)
+            })
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "could not replace {} ({e}). Try again with: sudo laplink update",
+                    dst.display()
+                )
+            })?;
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+    println!("Updated to {tag}. Run `laplink --version` to confirm.");
+    Ok(())
 }
 
 fn engine(config: &Config) -> anyhow::Result<Engine> {
@@ -313,26 +473,53 @@ fn run_device(cli: &Cli, config: &Config, cmd: &DeviceCmd) -> anyhow::Result<()>
 
 fn run_send(cli: &Cli, config: &Config, args: &SendArgs) -> anyhow::Result<()> {
     let engine = engine(config)?;
-    let target = normalize_addr(&args.to);
     let items = send::expand_sources(&args.paths)?;
     if items.is_empty() {
         anyhow::bail!("no regular files found in the given paths");
     }
-    let mut sink = CliSink::new(cli.json, cli.quiet, cli.verbose);
-    let summary = send::send(
-        config,
-        engine.identity(),
-        &target,
-        items,
-        send::SendOptions {
-            transfer_id: args.id.clone(),
-            chunk_size: args.chunk_size,
-            device_name: engine.identity().name.clone(),
-            dest: args.dest.clone(),
-        },
-        &mut sink,
-    )?;
-    sink.finish_send(&summary);
+    let targets: Vec<String> = args.to.iter().map(|t| normalize_addr(t)).collect();
+    let multi = targets.len() > 1;
+    let mut failures = 0usize;
+
+    // Send to each device in turn. (Sequential keeps output readable and disk
+    // reads simple; the same files go to every target.)
+    for target in &targets {
+        if multi && !cli.json {
+            eprintln!("\n→ {target}");
+        }
+        let mut sink = CliSink::new(cli.json, cli.quiet, cli.verbose);
+        let result = send::send(
+            config,
+            engine.identity(),
+            target,
+            items.clone(),
+            send::SendOptions {
+                transfer_id: args.id.clone(),
+                chunk_size: args.chunk_size,
+                device_name: engine.identity().name.clone(),
+                dest: args.dest.clone(),
+            },
+            &mut sink,
+        );
+        match result {
+            Ok(summary) => sink.finish_send(&summary),
+            Err(e) => {
+                failures += 1;
+                if cli.json {
+                    println!(
+                        "{}",
+                        serde_json::json!({ "target": target, "error": e.to_string() })
+                    );
+                } else {
+                    eprintln!("error sending to {target}: {e:#}");
+                }
+            }
+        }
+    }
+
+    if failures > 0 {
+        anyhow::bail!("{failures} of {} target(s) failed", targets.len());
+    }
     Ok(())
 }
 
@@ -387,7 +574,6 @@ fn run_receive(cli: &Cli, config: &Config, args: &ReceiveArgs) -> anyhow::Result
         .bind
         .clone()
         .unwrap_or_else(|| format!("0.0.0.0:{DEFAULT_PORT}"));
-    let mut sink = CliSink::new(cli.json, cli.quiet, cli.verbose);
     let opts = recv::ReceiveOptions {
         dest,
         accept_new: args.accept_new,
@@ -395,9 +581,267 @@ fn run_receive(cli: &Cli, config: &Config, args: &ReceiveArgs) -> anyhow::Result
         once: args.once,
         allow_sender_dest: args.allow_sender_dest,
     };
-    recv::listen(config, engine.identity(), &bind, &opts, &mut sink)?;
+    if args.once {
+        // One transfer then exit: keep it simple and sequential.
+        let mut sink = CliSink::new(cli.json, cli.quiet, cli.verbose);
+        recv::listen(config, engine.identity(), &bind, &opts, &mut sink)?;
+    } else {
+        // Default: handle concurrent senders, each on its own thread.
+        let (j, q, v) = (cli.json, cli.quiet, cli.verbose);
+        let make_sink = move || -> Box<dyn laptoplink_core::progress::ProgressSink> {
+            Box::new(CliSink::new(j, q, v))
+        };
+        recv::listen_concurrent(config, engine.identity(), &bind, &opts, make_sink)?;
+    }
     Ok(())
 }
+
+// ---- background agent ---------------------------------------------------
+
+fn agent_pid_path(config: &Config) -> PathBuf {
+    config.config_dir.join("agent.pid")
+}
+fn agent_meta_path(config: &Config) -> PathBuf {
+    config.config_dir.join("agent.json")
+}
+fn agent_log_path(config: &Config) -> PathBuf {
+    config.config_dir.join("agent.log")
+}
+
+fn read_pid(config: &Config) -> Option<u32> {
+    std::fs::read_to_string(agent_pid_path(config))
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+}
+
+/// Is a process with this pid currently alive?
+fn pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    #[cfg(windows)]
+    {
+        std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
+            .unwrap_or(false)
+    }
+}
+
+/// Terminate a process by pid (SIGTERM on Unix, taskkill on Windows).
+fn kill_pid(pid: u32) -> bool {
+    #[cfg(unix)]
+    let ok = std::process::Command::new("kill")
+        .arg(pid.to_string())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    #[cfg(windows)]
+    let ok = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/F"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    ok
+}
+
+fn run_agent(cli: &Cli, config: &Config, cmd: &AgentCmd) -> anyhow::Result<()> {
+    match cmd {
+        AgentCmd::Status => {
+            match read_pid(config) {
+                Some(pid) if pid_alive(pid) => {
+                    let meta = std::fs::read_to_string(agent_meta_path(config)).unwrap_or_default();
+                    if cli.json {
+                        println!(
+                            "{{\"running\":true,\"pid\":{pid},\"meta\":{}}}",
+                            if meta.is_empty() { "null".into() } else { meta }
+                        );
+                    } else {
+                        println!("Agent is running (pid {pid}).");
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&meta) {
+                            println!("  listening : {}", v["bind"].as_str().unwrap_or("?"));
+                            println!("  saving to : {}", v["dest"].as_str().unwrap_or("?"));
+                            println!(
+                                "  pairing   : {}",
+                                if v["accept_new"].as_bool().unwrap_or(false) {
+                                    "accept-new (on)"
+                                } else {
+                                    "paired only"
+                                }
+                            );
+                        }
+                        println!("  log       : {}", agent_log_path(config).display());
+                    }
+                }
+                _ => {
+                    // Clean a stale pid file if present.
+                    let _ = std::fs::remove_file(agent_pid_path(config));
+                    if cli.json {
+                        println!("{{\"running\":false}}");
+                    } else {
+                        println!("Agent is not running.");
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        AgentCmd::Stop => {
+            match read_pid(config) {
+                Some(pid) if pid_alive(pid) => {
+                    if kill_pid(pid) {
+                        let _ = std::fs::remove_file(agent_pid_path(config));
+                        let _ = std::fs::remove_file(agent_meta_path(config));
+                        println!("Agent stopped (pid {pid}).");
+                    } else {
+                        anyhow::bail!("failed to stop agent (pid {pid}); stop it manually");
+                    }
+                }
+                _ => {
+                    let _ = std::fs::remove_file(agent_pid_path(config));
+                    println!("No agent running.");
+                }
+            }
+            Ok(())
+        }
+
+        AgentCmd::Start(args) => {
+            if let Some(pid) = read_pid(config) {
+                if pid_alive(pid) {
+                    anyhow::bail!(
+                        "agent already running (pid {pid}); use `laplink agent stop` first"
+                    );
+                }
+            }
+            std::fs::create_dir_all(&config.config_dir)?;
+            let dest = args
+                .dest
+                .clone()
+                .unwrap_or_else(|| config.default_receive_dir());
+            std::fs::create_dir_all(&dest).context("creating destination directory")?;
+            let bind = args
+                .bind
+                .clone()
+                .unwrap_or_else(|| format!("0.0.0.0:{DEFAULT_PORT}"));
+
+            // Spawn ourselves as a detached `agent run` process.
+            let exe = std::env::current_exe().context("locating laplink binary")?;
+            let log = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(agent_log_path(config))?;
+            let log_err = log.try_clone()?;
+
+            let mut command = std::process::Command::new(exe);
+            if let Some(home) = &cli.home {
+                command.arg("--home").arg(home);
+            }
+            command.arg("agent").arg("run");
+            command.arg("--dest").arg(&dest);
+            command.arg("--bind").arg(&bind);
+            if args.accept_new {
+                command.arg("--accept-new");
+            }
+            if args.allow_sender_dest {
+                command.arg("--allow-sender-dest");
+            }
+            command
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::from(log))
+                .stderr(std::process::Stdio::from(log_err));
+            detach(&mut command);
+
+            let child = command.spawn().context("starting background agent")?;
+            let pid = child.id();
+            std::fs::write(agent_pid_path(config), pid.to_string())?;
+            let meta = serde_json::json!({
+                "pid": pid,
+                "bind": bind,
+                "dest": dest.to_string_lossy(),
+                "accept_new": args.accept_new,
+                "allow_sender_dest": args.allow_sender_dest,
+                "started_unix": laptoplink_core::manifest::now_unix(),
+            });
+            std::fs::write(agent_meta_path(config), serde_json::to_vec_pretty(&meta)?)?;
+
+            println!("Agent started (pid {pid}).");
+            println!("  listening : {bind}");
+            println!("  saving to : {}", dest.display());
+            if args.accept_new {
+                println!("  pairing   : accept-new (trusting the next device to connect)");
+            }
+            println!("Stop it with: laplink agent stop");
+            Ok(())
+        }
+
+        AgentCmd::Run(args) => {
+            // The actual long-running receiver (invoked by `agent start`).
+            let engine = engine(config)?;
+            let dest = args
+                .dest
+                .clone()
+                .unwrap_or_else(|| config.default_receive_dir());
+            std::fs::create_dir_all(&dest)?;
+            let bind = args
+                .bind
+                .clone()
+                .unwrap_or_else(|| format!("0.0.0.0:{DEFAULT_PORT}"));
+            let opts = recv::ReceiveOptions {
+                dest,
+                accept_new: args.accept_new,
+                device_name: engine.identity().name.clone(),
+                once: false,
+                allow_sender_dest: args.allow_sender_dest,
+            };
+            // Concurrent: the agent can receive several transfers at once.
+            let make_sink = || -> Box<dyn laptoplink_core::progress::ProgressSink> {
+                Box::new(CliSink::new(false, false, true))
+            };
+            recv::listen_concurrent(config, engine.identity(), &bind, &opts, make_sink)?;
+            Ok(())
+        }
+    }
+}
+
+/// Detach a child so it survives the launching shell/terminal.
+#[cfg(unix)]
+fn detach(command: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+    // Start a new session so the child isn't killed when the terminal closes.
+    unsafe {
+        command.pre_exec(|| {
+            libc_setsid();
+            Ok(())
+        });
+    }
+}
+
+#[cfg(unix)]
+fn libc_setsid() {
+    // Avoid a libc dependency: call setsid(2) directly.
+    extern "C" {
+        fn setsid() -> i32;
+    }
+    unsafe {
+        setsid();
+    }
+}
+
+#[cfg(windows)]
+fn detach(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    command.creation_flags(0x0000_0008 | 0x0000_0200);
+}
+
+#[cfg(not(any(unix, windows)))]
+fn detach(_command: &mut std::process::Command) {}
 
 fn run_transfer(cli: &Cli, config: &Config, cmd: &TransferCmd) -> anyhow::Result<()> {
     match cmd {

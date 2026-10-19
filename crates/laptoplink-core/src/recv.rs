@@ -25,9 +25,11 @@ use std::collections::HashSet;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Options controlling the receive server.
+#[derive(Clone)]
 pub struct ReceiveOptions {
     /// Directory under which received files are written.
     pub dest: PathBuf,
@@ -103,6 +105,74 @@ pub fn serve_on(
         }
     }
     Ok(())
+}
+
+/// Like [`listen`], but handles each inbound connection on its own thread so
+/// multiple senders can transfer **concurrently** (and one sender can open
+/// several transfers at once). Each connection gets a fresh progress sink from
+/// `make_sink`. Loops forever (the `once` option does not apply here).
+pub fn listen_concurrent<F>(
+    config: &Config,
+    identity: &DeviceIdentity,
+    bind_addr: &str,
+    opts: &ReceiveOptions,
+    make_sink: F,
+) -> Result<()>
+where
+    F: Fn() -> Box<dyn ProgressSink> + Send + Sync + 'static,
+{
+    let listener = TcpListener::bind(bind_addr)?;
+    {
+        let mut s = make_sink();
+        s.on_event(ProgressEvent::Note(format!(
+            "listening on {} as '{}' (fingerprint {}) — accepting concurrent transfers",
+            listener.local_addr()?,
+            opts.device_name,
+            identity.fingerprint().short()
+        )));
+    }
+    serve_loop_concurrent(listener, config, identity, opts, Arc::new(make_sink))
+}
+
+/// Concurrent variant of [`serve_on`] for an already-bound listener.
+pub fn serve_on_concurrent<F>(
+    listener: TcpListener,
+    config: &Config,
+    identity: &DeviceIdentity,
+    opts: &ReceiveOptions,
+    make_sink: F,
+) -> Result<()>
+where
+    F: Fn() -> Box<dyn ProgressSink> + Send + Sync + 'static,
+{
+    serve_loop_concurrent(listener, config, identity, opts, Arc::new(make_sink))
+}
+
+fn serve_loop_concurrent<F>(
+    listener: TcpListener,
+    config: &Config,
+    identity: &DeviceIdentity,
+    opts: &ReceiveOptions,
+    make_sink: Arc<F>,
+) -> Result<()>
+where
+    F: Fn() -> Box<dyn ProgressSink> + Send + Sync + 'static,
+{
+    loop {
+        let (stream, peer) = listener.accept()?;
+        let config = config.clone();
+        let identity = identity.clone();
+        let opts = opts.clone();
+        let make_sink = make_sink.clone();
+        std::thread::spawn(move || {
+            let mut sink = make_sink();
+            if let Err(e) = handle_connection(&config, &identity, stream, &opts, &mut *sink) {
+                sink.on_event(ProgressEvent::Note(format!(
+                    "connection from {peer} ended: {e}"
+                )));
+            }
+        });
+    }
 }
 
 fn handle_connection(
