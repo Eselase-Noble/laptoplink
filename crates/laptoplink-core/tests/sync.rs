@@ -83,9 +83,9 @@ fn transfers_new_then_skips_identical() {
         &src,
         opts(false, false, vec![]),
         &mut NullSink,
-    )
-    .unwrap();
-    h.join().unwrap().unwrap();
+    );
+    h.join().unwrap().expect("receiver side failed");
+    let s1 = s1.expect("sender side failed");
     assert_eq!(s1.files_total, 2);
     assert_eq!(s1.files_transferred, 2);
     assert_eq!(s1.files_skipped, 0);
