@@ -42,7 +42,11 @@ fn spawn_receiver(
             device_name: "receiver".into(),
             once: true,
         };
-        recv::serve_on(&listener, &cfg, &id, &opts, &mut NullSink)
+        let r = recv::serve_on(&listener, &cfg, &id, &opts, &mut NullSink);
+        if let Err(e) = &r {
+            eprintln!("[receiver] error: {e}");
+        }
+        r
     });
     (addr, handle)
 }
