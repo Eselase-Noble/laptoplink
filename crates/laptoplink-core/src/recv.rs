@@ -20,9 +20,11 @@ use crate::pathsafety;
 use crate::progress::{ProgressEvent, ProgressSink};
 use crate::protocol::{self, ChunkSelection, Control, FilePlan};
 use crate::transport;
+use std::collections::HashSet;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Options controlling the receive server.
 pub struct ReceiveOptions {
@@ -172,24 +174,50 @@ fn handle_connection(
         },
     )?;
 
-    // --- Offer / plan -----------------------------------------------------
-    let offer = protocol::read_control(&mut secure, config.limits.max_message_bytes)?;
-    let (transfer_id, files) = match offer {
-        Control::Offer { transfer_id, files } => (transfer_id, files),
-        other => return Err(Error::protocol(format!("expected Offer, got {other:?}"))),
-    };
+    // --- Dispatch: a push Offer or a one-way SyncOffer -------------------
+    let first = protocol::read_control(&mut secure, config.limits.max_message_bytes)?;
+    match first {
+        Control::Offer { transfer_id, files } => {
+            handle_offer(config, &mut secure, opts, sink, &fp, transfer_id, files)
+        }
+        Control::SyncOffer {
+            sync_id,
+            files,
+            delete,
+            dry_run,
+            checksum,
+            excludes,
+        } => handle_sync(
+            config,
+            &mut secure,
+            opts,
+            sink,
+            &fp,
+            sync_id,
+            files,
+            delete,
+            dry_run,
+            checksum,
+            excludes,
+        ),
+        other => Err(Error::protocol(format!(
+            "expected Offer or SyncOffer, got {other:?}"
+        ))),
+    }
+}
 
-    // Enforce coarse resource limits before allocating anything per-file.
-    if files.len() as u64 > config.limits.max_files {
+/// Validate coarse resource limits for an offered file set before allocating.
+fn check_limits(files: &[protocol::FileOffer], limits: &crate::config::Limits) -> Result<()> {
+    if files.len() as u64 > limits.max_files {
         return Err(Error::LimitExceeded(format!(
             "{} files exceeds limit {}",
             files.len(),
-            config.limits.max_files
+            limits.max_files
         )));
     }
     let mut total_chunks: u64 = 0;
-    for f in &files {
-        if f.chunk_size as usize > config.limits.max_chunk_bytes || f.chunk_size == 0 {
+    for f in files {
+        if f.chunk_size as usize > limits.max_chunk_bytes || f.chunk_size == 0 {
             return Err(Error::LimitExceeded(format!(
                 "chunk size {} out of bounds for '{}'",
                 f.chunk_size, f.rel_path
@@ -197,14 +225,29 @@ fn handle_connection(
         }
         total_chunks = total_chunks.saturating_add(chunk::chunk_count(f.size, f.chunk_size));
     }
-    if total_chunks > config.limits.max_total_chunks {
+    if total_chunks > limits.max_total_chunks {
         return Err(Error::LimitExceeded(format!(
             "{total_chunks} total chunks exceeds limit {}",
-            config.limits.max_total_chunks
+            limits.max_total_chunks
         )));
     }
+    Ok(())
+}
 
-    // Load or create the durable manifest and derive each file's plan.
+/// Handle a push transfer ([`Control::Offer`]): manifest-based resume planning,
+/// then the shared receive loop.
+#[allow(clippy::too_many_arguments)]
+fn handle_offer(
+    config: &Config,
+    secure: &mut transport::SecureStream,
+    opts: &ReceiveOptions,
+    sink: &mut dyn ProgressSink,
+    fp: &crate::identity::Fingerprint,
+    transfer_id: String,
+    files: Vec<protocol::FileOffer>,
+) -> Result<()> {
+    check_limits(&files, &config.limits)?;
+
     let mut manifest = ReceiverManifest::load(&opts.dest, &transfer_id)?
         .unwrap_or_else(|| ReceiverManifest::new(&opts.dest, &transfer_id, fp.full()));
 
@@ -221,10 +264,8 @@ fn handle_connection(
     let mut plans = Vec::with_capacity(files.len());
     for (idx, f) in files.iter().enumerate() {
         let file_index = idx as u32;
-        // Validate the destination path before trusting it anywhere else.
         let dest_path = pathsafety::safe_join(&opts.dest, &f.rel_path)?;
         let part_path = tmp_dir.join(format!("{file_index}.part"));
-
         let count = chunk::chunk_count(f.size, f.chunk_size);
 
         // Decide whether prior partial data is still valid for resume.
@@ -245,7 +286,6 @@ fn handle_connection(
             } else if reuse {
                 (rf.verified.clone(), rf.verified.count_set() > 0, false)
             } else {
-                // Signature changed or never started: discard any partial data.
                 let _ = std::fs::remove_file(&part_path);
                 (Bitmap::new(count), false, false)
             }
@@ -253,19 +293,20 @@ fn handle_connection(
             (Bitmap::new(count), false, false)
         };
 
-        // Record (or refresh) this file's manifest entry.
-        let entry = ReceiverFile {
-            file_index,
-            rel_path: f.rel_path.clone(),
-            size: f.size,
-            chunk_size: f.chunk_size,
-            src_mtime: f.mtime,
-            expected_file_hash: None,
-            verified: verified.clone(),
-            part_path: part_path.clone(),
-            committed: already_committed,
-        };
-        upsert_file(&mut manifest, entry);
+        upsert_file(
+            &mut manifest,
+            ReceiverFile {
+                file_index,
+                rel_path: f.rel_path.clone(),
+                size: f.size,
+                chunk_size: f.chunk_size,
+                src_mtime: f.mtime,
+                expected_file_hash: None,
+                verified: verified.clone(),
+                part_path,
+                committed: already_committed,
+            },
+        );
 
         let needed = if already_committed {
             ChunkSelection::None
@@ -279,7 +320,6 @@ fn handle_connection(
                 ChunkSelection::Indices(missing)
             }
         };
-
         plans.push(FilePlan {
             file_index,
             needed,
@@ -288,16 +328,264 @@ fn handle_connection(
     }
     manifest.save()?;
 
-    protocol::write_control(&mut secure, &Control::OfferResponse { files: plans })?;
+    protocol::write_control(secure, &Control::OfferResponse { files: plans })?;
 
-    // --- Receive loop -----------------------------------------------------
+    let bytes = run_receive_loop(config, secure, &opts.dest, &mut manifest, sink)?;
+    manifest.save()?;
+    sink.on_event(ProgressEvent::TransferCompleted {
+        transfer_id,
+        bytes_transferred: bytes,
+        bytes_skipped: total_bytes.saturating_sub(bytes),
+    });
+    Ok(())
+}
+
+/// Handle a one-way sync ([`Control::SyncOffer`]): compare against the real
+/// destination tree, skip identical files, report/perform deletions, and
+/// transfer changed/new files via the shared receive loop.
+#[allow(clippy::too_many_arguments)]
+fn handle_sync(
+    config: &Config,
+    secure: &mut transport::SecureStream,
+    opts: &ReceiveOptions,
+    sink: &mut dyn ProgressSink,
+    fp: &crate::identity::Fingerprint,
+    sync_id: String,
+    files: Vec<protocol::FileOffer>,
+    delete: bool,
+    dry_run: bool,
+    checksum: bool,
+    excludes: Vec<String>,
+) -> Result<()> {
+    check_limits(&files, &config.limits)?;
+
+    let source_set: HashSet<&str> = files.iter().map(|f| f.rel_path.as_str()).collect();
+    let tmp_dir = opts.dest.join(".laptoplink").join("tmp").join(&sync_id);
+    let mut manifest = ReceiverManifest::new(&opts.dest, &sync_id, fp.full());
+    let mut plans = Vec::with_capacity(files.len());
+    let mut conflicts = Vec::new();
+    let mut transfer_bytes_total: u64 = 0;
+
+    for (idx, f) in files.iter().enumerate() {
+        let file_index = idx as u32;
+        let dest_path = pathsafety::safe_join(&opts.dest, &f.rel_path)?;
+        let count = chunk::chunk_count(f.size, f.chunk_size);
+
+        // Compare against the actual destination file to decide skip vs send.
+        let needed = match std::fs::symlink_metadata(&dest_path) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                conflicts.push(format!("{}: destination is a symlink; skipped", f.rel_path));
+                ChunkSelection::None
+            }
+            Ok(meta) if meta.is_dir() => {
+                conflicts.push(format!(
+                    "{}: destination is a directory; skipped",
+                    f.rel_path
+                ));
+                ChunkSelection::None
+            }
+            Ok(meta) if meta.is_file() => {
+                if files_identical(&dest_path, &meta, f, checksum) {
+                    ChunkSelection::None
+                } else {
+                    ChunkSelection::All
+                }
+            }
+            _ => ChunkSelection::All, // not found -> new file
+        };
+
+        if matches!(needed, ChunkSelection::All) {
+            transfer_bytes_total += f.size;
+            if !dry_run {
+                upsert_file(
+                    &mut manifest,
+                    ReceiverFile {
+                        file_index,
+                        rel_path: f.rel_path.clone(),
+                        size: f.size,
+                        chunk_size: f.chunk_size,
+                        src_mtime: f.mtime,
+                        expected_file_hash: None,
+                        verified: Bitmap::new(count),
+                        part_path: tmp_dir.join(format!("{file_index}.part")),
+                        committed: false,
+                    },
+                );
+            }
+        }
+
+        plans.push(FilePlan {
+            file_index,
+            needed,
+            resume: false,
+        });
+    }
+
+    // Compute extraneous destination files (candidates for deletion).
+    let deletions = scan_deletions(&opts.dest, &source_set, &excludes);
+
+    sink.on_event(ProgressEvent::TransferStarted {
+        transfer_id: sync_id.clone(),
+        total_files: files.len() as u64,
+        total_bytes: transfer_bytes_total,
+    });
+
+    protocol::write_control(
+        secure,
+        &Control::SyncResponse {
+            files: plans,
+            deletions: deletions.clone(),
+            conflicts,
+        },
+    )?;
+
+    if dry_run {
+        // No changes on either side; just drain the sender's Complete.
+        match protocol::read_control(secure, config.limits.max_message_bytes)? {
+            Control::Complete => {}
+            Control::Error { message } => {
+                return Err(Error::protocol(format!("sender aborted: {message}")))
+            }
+            other => return Err(Error::protocol(format!("expected Complete, got {other:?}"))),
+        }
+        protocol::write_control(secure, &Control::SyncComplete { deleted: 0 })?;
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(&tmp_dir)?;
+    manifest.save()?;
+
+    let bytes = run_receive_loop(config, secure, &opts.dest, &mut manifest, sink)?;
+    manifest.save()?;
+
+    // Deletions happen only after all transfers succeeded, and only if asked.
+    let mut deleted = 0u64;
+    if delete {
+        for rel in &deletions {
+            let path = pathsafety::safe_join(&opts.dest, rel)?;
+            // Refuse to follow a symlink when deleting.
+            if let Ok(meta) = std::fs::symlink_metadata(&path) {
+                if meta.is_file() && std::fs::remove_file(&path).is_ok() {
+                    deleted += 1;
+                }
+            }
+        }
+        prune_empty_dirs(&opts.dest);
+    }
+
+    // Clean up this sync's transient manifest + part dir.
+    let _ = std::fs::remove_file(ReceiverManifest::manifest_path(&opts.dest, &sync_id));
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    protocol::write_control(secure, &Control::SyncComplete { deleted })?;
+    sink.on_event(ProgressEvent::TransferCompleted {
+        transfer_id: sync_id,
+        bytes_transferred: bytes,
+        bytes_skipped: transfer_bytes_total.saturating_sub(bytes),
+    });
+    Ok(())
+}
+
+/// Is the destination file already identical to the offered source file?
+/// By size + mtime (fast, default) or whole-file hash when `checksum`.
+fn files_identical(
+    dest_path: &Path,
+    dest_meta: &std::fs::Metadata,
+    offer: &protocol::FileOffer,
+    checksum: bool,
+) -> bool {
+    if dest_meta.len() != offer.size {
+        return false;
+    }
+    if checksum {
+        match (&offer.content_hash, hash_whole_file(dest_path)) {
+            (Some(expected), Ok(got)) => expected == &got,
+            _ => false,
+        }
+    } else {
+        // Require a usable mtime on both sides; otherwise re-send to be safe.
+        match (mtime_secs(dest_meta), offer.mtime) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+/// Walk the destination tree and return relative paths that are not in the
+/// source set and are not protected by an exclude pattern (and never anything
+/// under the `.laptoplink` control directory).
+fn scan_deletions(dest: &Path, source_set: &HashSet<&str>, excludes: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    if !dest.exists() {
+        return out;
+    }
+    for entry in walkdir::WalkDir::new(dest)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let rel = match entry.path().strip_prefix(dest) {
+            Ok(r) => pathsafety::to_wire_rel(r),
+            Err(_) => continue,
+        };
+        if rel.starts_with(".laptoplink") {
+            continue;
+        }
+        if source_set.contains(rel.as_str()) {
+            continue;
+        }
+        if crate::glob::any_match(excludes, &rel) {
+            continue; // excluded files are protected from deletion
+        }
+        out.push(rel);
+    }
+    out.sort();
+    out
+}
+
+/// Best-effort removal of directories left empty after deletions.
+fn prune_empty_dirs(dest: &Path) {
+    // Walk deepest-first so children are gone before we test a parent.
+    let mut dirs: Vec<PathBuf> = walkdir::WalkDir::new(dest)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_dir())
+        .map(|e| e.path().to_path_buf())
+        .collect();
+    dirs.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+    for dir in dirs {
+        if dir == *dest || dir.ends_with(".laptoplink") {
+            continue;
+        }
+        if dir.starts_with(dest.join(".laptoplink")) {
+            continue;
+        }
+        let _ = std::fs::remove_dir(&dir); // only succeeds if empty
+    }
+}
+
+/// The shared chunk-receive loop used by both push and sync: reads chunk
+/// headers + payloads, verifies each, writes to the part file, and finalizes
+/// each file on `FileDone`. Returns the number of bytes written. Stops on
+/// `Complete`.
+fn run_receive_loop(
+    config: &Config,
+    secure: &mut transport::SecureStream,
+    dest: &Path,
+    manifest: &mut ReceiverManifest,
+    sink: &mut dyn ProgressSink,
+) -> Result<u64> {
     let mut payload = vec![0u8; 0];
     let mut bytes_written: u64 = 0;
     let mut open_file: Option<(u32, std::fs::File)> = None;
     let mut since_checkpoint: u64 = 0;
 
     loop {
-        let msg = protocol::read_control(&mut secure, config.limits.max_message_bytes)?;
+        let msg = protocol::read_control(secure, config.limits.max_message_bytes)?;
         match msg {
             Control::ChunkHeader {
                 file_index,
@@ -309,11 +597,10 @@ fn handle_connection(
                 if len as usize > config.limits.max_chunk_bytes {
                     return Err(Error::LimitExceeded(format!("chunk len {len} too large")));
                 }
-                // Read exactly `len` bytes of (decrypted) payload.
                 if payload.len() < len as usize {
                     payload.resize(len as usize, 0);
                 }
-                read_exact(&mut secure, &mut payload[..len as usize])?;
+                read_exact(secure, &mut payload[..len as usize])?;
 
                 // Verify integrity BEFORE touching disk.
                 let got = chunk::hash_chunk(&payload[..len as usize]);
@@ -323,7 +610,6 @@ fn handle_connection(
                     )));
                 }
 
-                // Open the right part file (keep the last one open across chunks).
                 let rf = manifest
                     .file_mut(file_index)
                     .ok_or_else(|| Error::protocol("chunk for unknown file index"))?;
@@ -339,7 +625,6 @@ fn handle_connection(
                 f.seek(SeekFrom::Start(offset))?;
                 f.write_all(&payload[..len as usize])?;
 
-                // Mark verified only after the write returns.
                 rf.verified.set(chunk_index);
                 bytes_written += len as u64;
                 since_checkpoint += len as u64;
@@ -348,7 +633,6 @@ fn handle_connection(
                     delta_bytes: len as u64,
                 });
 
-                // Periodic durable checkpoint so resume works after a crash.
                 if since_checkpoint >= config.limits.max_inflight_bytes as u64 {
                     if let Some((_, f)) = open_file.as_ref() {
                         fsutil::sync_file(f)?;
@@ -362,18 +646,17 @@ fn handle_connection(
                 file_index,
                 file_hash,
             } => {
-                // Flush and close the part file before verifying + committing.
                 if open_file.as_ref().map(|(i, _)| *i) == Some(file_index) {
                     if let Some((_, f)) = open_file.take() {
                         fsutil::sync_file(&f)?;
                     }
                 }
-                let result = finalize_file(&opts.dest, &mut manifest, file_index, &file_hash);
+                let result = finalize_file(dest, manifest, file_index, &file_hash);
                 manifest.save()?;
                 match result {
                     Ok(rel_path) => {
                         protocol::write_control(
-                            &mut secure,
+                            secure,
                             &Control::FileResult {
                                 file_index,
                                 ok: true,
@@ -387,7 +670,7 @@ fn handle_connection(
                     }
                     Err(e) => {
                         protocol::write_control(
-                            &mut secure,
+                            secure,
                             &Control::FileResult {
                                 file_index,
                                 ok: false,
@@ -406,13 +689,7 @@ fn handle_connection(
         }
     }
 
-    manifest.save()?;
-    sink.on_event(ProgressEvent::TransferCompleted {
-        transfer_id,
-        bytes_transferred: bytes_written,
-        bytes_skipped: total_bytes.saturating_sub(bytes_written),
-    });
-    Ok(())
+    Ok(bytes_written)
 }
 
 /// Verify a fully-received file against `expected_hash`, then atomically move it
@@ -476,8 +753,40 @@ fn finalize_file(
         std::fs::create_dir_all(parent)?;
     }
     fsutil::atomic_rename(&rf.part_path, &dest_path)?;
+
+    // Preserve the source mtime so a later `sync` can skip this file by its
+    // size + mtime signature instead of re-transferring it every run.
+    if let Some(secs) = rf.src_mtime {
+        if let Ok(f) = std::fs::File::options().write(true).open(&dest_path) {
+            let _ = f.set_modified(UNIX_EPOCH + Duration::from_secs(secs));
+        }
+    }
+
     rf.committed = true;
     Ok(rf.rel_path.clone())
+}
+
+/// A file's mtime in whole Unix seconds, if the platform/filesystem reports it.
+fn mtime_secs(meta: &std::fs::Metadata) -> Option<u64> {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+}
+
+/// Stream a file and return its hex BLAKE3 hash (bounded memory).
+fn hash_whole_file(path: &Path) -> Result<String> {
+    let mut hasher = chunk::FileHasher::new();
+    let mut f = std::fs::File::open(path)?;
+    let mut buf = vec![0u8; 1024 * 1024];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher.finalize_hex())
 }
 
 /// Reject commit if the destination already exists as a symlink — prevents a

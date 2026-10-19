@@ -30,6 +30,7 @@ pub mod chunk;
 pub mod config;
 pub mod error;
 pub mod fsutil;
+pub mod glob;
 pub mod identity;
 pub mod manifest;
 pub mod pathsafety;
@@ -37,6 +38,7 @@ pub mod progress;
 pub mod protocol;
 pub mod recv;
 pub mod send;
+pub mod sync;
 pub mod transport;
 
 pub use error::{Error, Result};

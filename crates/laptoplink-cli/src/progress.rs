@@ -10,6 +10,7 @@
 
 use laptoplink_core::progress::{ProgressEvent, ProgressSink};
 use laptoplink_core::send::SendSummary;
+use laptoplink_core::sync::SyncSummary;
 use std::io::Write;
 use std::time::{Duration, Instant};
 
@@ -74,6 +75,67 @@ impl CliSink {
             truncate(&self.current_file, 30)
         );
         let _ = std::io::stderr().flush();
+    }
+
+    /// Print the final summary for a sync operation.
+    pub fn finish_sync(&mut self, s: &SyncSummary, delete_requested: bool) {
+        if self.json {
+            self.emit_json(serde_json::json!({
+                "event": "sync_summary",
+                "dry_run": s.dry_run,
+                "files_total": s.files_total,
+                "files_transferred": s.files_transferred,
+                "files_skipped": s.files_skipped,
+                "bytes_transferred": s.bytes_transferred,
+                "deletions": s.deletions,
+                "deleted": s.deleted,
+                "conflicts": s.conflicts,
+            }));
+            return;
+        }
+        if !self.quiet {
+            eprintln!();
+        }
+        if s.dry_run {
+            println!("Dry run — no changes made:");
+            println!(
+                "  {} to transfer, {} identical (skipped)",
+                s.files_transferred, s.files_skipped
+            );
+            if !s.deletions.is_empty() {
+                println!(
+                    "  {} extraneous file(s){}:",
+                    s.deletions.len(),
+                    if delete_requested {
+                        " would be deleted"
+                    } else {
+                        " (pass --delete to remove)"
+                    }
+                );
+                for d in &s.deletions {
+                    println!("    - {d}");
+                }
+            }
+        } else {
+            println!("Sync complete:");
+            println!(
+                "  transferred {} file(s), {}",
+                s.files_transferred,
+                bytes(s.bytes_transferred)
+            );
+            println!("  {} identical (skipped)", s.files_skipped);
+            if delete_requested {
+                println!("  deleted {} extraneous file(s)", s.deleted);
+            } else if !s.deletions.is_empty() {
+                println!(
+                    "  {} extraneous file(s) left in place (pass --delete to remove)",
+                    s.deletions.len()
+                );
+            }
+        }
+        for c in &s.conflicts {
+            println!("  conflict: {c}");
+        }
     }
 
     /// Print the final summary for a send operation.

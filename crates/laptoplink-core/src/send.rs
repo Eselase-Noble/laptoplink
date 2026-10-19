@@ -144,6 +144,7 @@ pub fn send(
             chunk_size,
             mode,
             mtime,
+            content_hash: None,
         });
         sender_files.push(SenderFile {
             rel_path: item.rel_path.clone(),
@@ -183,22 +184,20 @@ pub fn send(
     result
 }
 
-#[allow(clippy::too_many_arguments)]
-fn run_send(
+/// Connect to `target_addr`, perform the Noise handshake, and exchange
+/// Hello/HelloAck. Shared by the push and sync paths. Returns the authenticated
+/// [`SecureStream`] ready for an `Offer` or `SyncOffer`.
+pub(crate) fn connect_and_hello(
     config: &Config,
     identity: &DeviceIdentity,
     target_addr: &str,
-    transfer_id: &str,
-    items: &[SendItem],
-    offers: &[FileOffer],
-    total_bytes: u64,
     sink: &mut dyn ProgressSink,
-) -> Result<SendSummary> {
+) -> Result<SecureStream> {
     let stream = TcpStream::connect(target_addr)?;
     stream.set_nodelay(true).ok();
     let mut secure = transport::handshake_initiator(stream, identity)?;
 
-    // Optional: note whether we already trust the receiver's key.
+    // Note (non-fatal) whether we already trust the receiver's key.
     let peers = config.load_peers()?;
     if !peers.is_authorized(secure.remote_fingerprint()) {
         sink.on_event(ProgressEvent::Note(format!(
@@ -207,7 +206,6 @@ fn run_send(
         )));
     }
 
-    // Hello / HelloAck.
     protocol::write_control(
         &mut secure,
         &Control::Hello {
@@ -225,6 +223,21 @@ fn run_send(
         } => return Err(Error::RejectedByPeer(reason)),
         other => return Err(Error::protocol(format!("expected HelloAck, got {other:?}"))),
     }
+    Ok(secure)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_send(
+    config: &Config,
+    identity: &DeviceIdentity,
+    target_addr: &str,
+    transfer_id: &str,
+    items: &[SendItem],
+    offers: &[FileOffer],
+    total_bytes: u64,
+    sink: &mut dyn ProgressSink,
+) -> Result<SendSummary> {
+    let mut secure = connect_and_hello(config, identity, target_addr, sink)?;
 
     // Offer / OfferResponse.
     protocol::write_control(
@@ -289,7 +302,7 @@ fn run_send(
 /// Stream one file: single sequential pass that computes the whole-file hash
 /// and sends exactly the chunks named in `plan`. Returns `(bytes_sent,
 /// bytes_skipped)`.
-fn send_one_file(
+pub(crate) fn send_one_file(
     config: &Config,
     secure: &mut SecureStream,
     item: &SendItem,
@@ -438,7 +451,7 @@ fn common_root(items: &[SendItem]) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn mtime_unix(meta: &std::fs::Metadata) -> Option<u64> {
+pub(crate) fn mtime_unix(meta: &std::fs::Metadata) -> Option<u64> {
     meta.modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -446,13 +459,13 @@ fn mtime_unix(meta: &std::fs::Metadata) -> Option<u64> {
 }
 
 #[cfg(unix)]
-fn unix_mode(meta: &std::fs::Metadata) -> Option<u32> {
+pub(crate) fn unix_mode(meta: &std::fs::Metadata) -> Option<u32> {
     use std::os::unix::fs::MetadataExt;
     Some(meta.mode())
 }
 
 #[cfg(not(unix))]
-fn unix_mode(_meta: &std::fs::Metadata) -> Option<u32> {
+pub(crate) fn unix_mode(_meta: &std::fs::Metadata) -> Option<u32> {
     None
 }
 

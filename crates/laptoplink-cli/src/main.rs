@@ -20,7 +20,7 @@ use clap::{Args, Parser, Subcommand};
 use laptoplink_core::config::Config;
 use laptoplink_core::identity::Fingerprint;
 use laptoplink_core::manifest::SenderRecord;
-use laptoplink_core::{recv, send, Engine, Error};
+use laptoplink_core::{recv, send, sync, Engine, Error};
 use progress::CliSink;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -65,6 +65,9 @@ enum Command {
 
     /// Send one or more files/directories to a device.
     Send(SendArgs),
+
+    /// One-way sync a source directory's contents to a device's destination.
+    Sync(SyncArgs),
 
     /// Receive files (run a listening server).
     Receive(ReceiveArgs),
@@ -119,6 +122,44 @@ struct SendArgs {
     /// Reuse an existing transfer id (manual resume).
     #[arg(long)]
     id: Option<String>,
+}
+
+#[derive(Args)]
+struct SyncArgs {
+    /// Source directory whose *contents* are synced into the destination.
+    #[arg(value_name = "SRC_DIR")]
+    source: PathBuf,
+
+    /// Target device address: `host` or `host:port` (default port 9031).
+    /// The destination directory is the one the receiver was started with.
+    #[arg(long = "to", value_name = "ADDR")]
+    to: String,
+
+    /// Show what would change without transferring or deleting anything.
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Delete destination files that are not present in the source
+    /// (destructive; prompts for confirmation unless --yes).
+    #[arg(long)]
+    delete: bool,
+
+    /// Exclude paths matching this glob (repeatable). Excluded files are also
+    /// protected from --delete.
+    #[arg(long, value_name = "GLOB")]
+    exclude: Vec<String>,
+
+    /// Compare files by content hash instead of size + mtime.
+    #[arg(long)]
+    checksum: bool,
+
+    /// Skip the confirmation prompt for --delete.
+    #[arg(long)]
+    yes: bool,
+
+    /// Override chunk size in bytes for transferred files.
+    #[arg(long)]
+    chunk_size: Option<u32>,
 }
 
 #[derive(Args)]
@@ -184,6 +225,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
     match &cli.command {
         Command::Device(cmd) => run_device(cli, &config, cmd),
         Command::Send(args) => run_send(cli, &config, args),
+        Command::Sync(args) => run_sync(cli, &config, args),
         Command::Receive(args) => run_receive(cli, &config, args),
         Command::Transfer(cmd) => run_transfer(cli, &config, cmd),
         Command::Benchmark(args) => run_benchmark(cli, &config, args),
@@ -274,6 +316,45 @@ fn run_send(cli: &Cli, config: &Config, args: &SendArgs) -> anyhow::Result<()> {
         &mut sink,
     )?;
     sink.finish_send(&summary);
+    Ok(())
+}
+
+fn run_sync(cli: &Cli, config: &Config, args: &SyncArgs) -> anyhow::Result<()> {
+    let engine = engine(config)?;
+    let target = normalize_addr(&args.to);
+
+    // Destructive deletion requires confirmation unless --dry-run or --yes.
+    if args.delete && !args.dry_run && !args.yes {
+        eprint!(
+            "This will DELETE destination files not present in '{}'. Continue? [y/N] ",
+            args.source.display()
+        );
+        use std::io::Write;
+        std::io::stderr().flush().ok();
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line)?;
+        if !matches!(line.trim().to_lowercase().as_str(), "y" | "yes") {
+            anyhow::bail!("aborted; no changes made");
+        }
+    }
+
+    let mut sink = CliSink::new(cli.json, cli.quiet, cli.verbose);
+    let summary = sync::sync(
+        config,
+        engine.identity(),
+        &target,
+        &args.source,
+        sync::SyncOptions {
+            delete: args.delete,
+            dry_run: args.dry_run,
+            checksum: args.checksum,
+            excludes: args.exclude.clone(),
+            chunk_size: args.chunk_size,
+            device_name: engine.identity().name.clone(),
+        },
+        &mut sink,
+    )?;
+    sink.finish_sync(&summary, args.delete);
     Ok(())
 }
 

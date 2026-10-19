@@ -65,6 +65,35 @@ pub enum Control {
     Complete,
     /// Out-of-band error from either side; the connection is torn down after.
     Error { message: String },
+
+    // --- Synchronization (Phase 3) ---------------------------------------
+    /// Sender proposes a one-way directory sync. Unlike [`Control::Offer`],
+    /// the receiver compares each file against the *actual* destination tree
+    /// (size + mtime, or content hash when `checksum`) and skips identical
+    /// files, and may report/perform deletions of extraneous destination files.
+    SyncOffer {
+        sync_id: String,
+        files: Vec<FileOffer>,
+        /// Delete destination files not present in the source set (gated).
+        delete: bool,
+        /// Compute the plan but make no changes on either side.
+        dry_run: bool,
+        /// Compare file contents by hash rather than size + mtime.
+        checksum: bool,
+        /// Exclude globs (already applied by the sender); the receiver also
+        /// uses them to protect matching destination files from deletion.
+        excludes: Vec<String>,
+    },
+    /// Receiver's answer to a [`Control::SyncOffer`]: per-file plan plus the
+    /// set of destination paths that are extraneous (would be / were deleted)
+    /// and any detected conflicts.
+    SyncResponse {
+        files: Vec<FilePlan>,
+        deletions: Vec<String>,
+        conflicts: Vec<String>,
+    },
+    /// Receiver's final message after a sync: how many files it deleted.
+    SyncComplete { deleted: u64 },
 }
 
 /// A file proposed in an [`Control::Offer`].
@@ -82,6 +111,11 @@ pub struct FileOffer {
     /// `size` it forms a cheap content signature: if either differs from a
     /// prior attempt, the receiver discards partial data and restarts the file.
     pub mtime: Option<u64>,
+    /// Whole-file BLAKE3 hash (hex), populated only for `sync --checksum` so
+    /// the receiver can compare contents rather than size + mtime. `None` on
+    /// the normal push path (the sender streams and verifies anyway).
+    #[serde(default)]
+    pub content_hash: Option<String>,
 }
 
 /// The receiver's plan for a single offered file.
