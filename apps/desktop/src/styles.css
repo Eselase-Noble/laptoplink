@@ -118,9 +118,48 @@ body {
 .side-h { font-size: 12px; color: var(--mut); margin-bottom: 9px; text-transform: none; }
 .muted { color: var(--mut); font-size: 13px; }
 
-.progress { display: flex; flex-direction: column; gap: 8px; }
-.track { height: 8px; background: var(--wash2); border-radius: 99px; overflow: hidden; }
+/* live transfer rail: two devices with packets flowing while active */
+.rail { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.rail-node { display: grid; place-items: center; opacity: .9; }
+.rail-wire { position: relative; flex: 1; height: 16px; }
+.rail-wire::before {
+  content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 2px;
+  transform: translateY(-50%); background: var(--wash2);
+}
+.rail .pkt {
+  position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 2px;
+  background: var(--ink); transform: translateY(-50%) rotate(45deg); opacity: 0;
+}
+.rail-label { font-family: var(--mono); font-size: 11px; color: var(--mut); white-space: nowrap; }
+.rail.idle .rail-node { opacity: .3; }
+.rail.idle .rail-wire::before { background: var(--wash2); }
+
+/* animate packets only while busy */
+.rail.busy .pkt { animation: flow 1.25s linear infinite; opacity: 1; }
+.rail.busy .pkt:nth-child(1) { animation-delay: 0s; }
+.rail.busy .pkt:nth-child(2) { animation-delay: .42s; }
+.rail.busy .pkt:nth-child(3) { animation-delay: .84s; }
+.rail.busy.in .pkt { animation-direction: reverse; }
+.rail.busy .rail-node { animation: blip 1.25s ease-in-out infinite; }
+@keyframes flow { 0% { left: 2%; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 94%; opacity: 0; } }
+@keyframes blip { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+.progress { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.track { height: 8px; background: var(--wash2); border-radius: 99px; overflow: hidden; position: relative; }
 .fill { height: 100%; background: var(--ink); transition: width .18s linear; }
+/* moving sheen while a transfer is live */
+.track.live::after {
+  content: ""; position: absolute; inset: 0; border-radius: 99px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+  background-size: 40% 100%; background-repeat: no-repeat;
+  animation: sheen 1.1s linear infinite; mix-blend-mode: overlay;
+}
+@keyframes sheen { 0% { background-position: -40% 0; } 100% { background-position: 140% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rail.busy .pkt, .rail.busy .rail-node, .track.live::after { animation: none; }
+  .rail.busy .pkt { opacity: .8; }
+}
 .pct { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--mut); }
 .active-file { font-family: var(--mono); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pct-n { font-family: var(--mono); }

@@ -296,8 +296,27 @@ export default function App() {
         </section>
 
         <aside className="side">
+          {(() => {
+            const busy = sending || active !== "" || (total > 0 && done < total);
+            const dir = sending ? "out" : "in";
+            return (
+              <div className={`rail ${busy ? "busy " + dir : "idle"}`} aria-hidden>
+                <span className="rail-node">
+                  <svg width="16" height="16" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="currentColor"/></svg>
+                </span>
+                <span className="rail-wire">
+                  <i className="pkt" /><i className="pkt" /><i className="pkt" />
+                </span>
+                <span className="rail-node">
+                  <svg width="16" height="16" viewBox="0 0 100 100"><rect x="6" y="6" width="88" height="88" rx="22" fill="none" stroke="currentColor" stroke-width="10"/></svg>
+                </span>
+                <span className="rail-label">{busy ? (sending ? "sending…" : "receiving…") : "idle"}</span>
+              </div>
+            );
+          })()}
+
           <div className="progress">
-            <div className="track">
+            <div className={`track${sending || (total > 0 && done < total) ? " live" : ""}`}>
               <div className="fill" style={{ width: `${pct}%` }} />
             </div>
             <div className="pct">
