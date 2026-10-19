@@ -90,6 +90,14 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 - ⬜ Temp-file retention/cleanup policy
 - ⬜ Signed release artifacts & SBOM
 
+## Platform notes
+- The sync integration tests run on Linux and macOS. They are gated off Windows
+  because driving both sender and receiver in a single process over loopback
+  trips a Windows abortive-close race (WSAECONNRESET) at the final-file
+  handshake that does not occur in real two-process use. The same transport and
+  transfer path are covered on Windows by the push tests. Two-process Windows
+  validation of sync is tracked as remaining work.
+
 ## Known limitations (today)
 - Local network only; no NAT traversal or relay yet.
 - Receiver handles one connection at a time.
