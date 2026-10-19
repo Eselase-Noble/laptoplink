@@ -441,6 +441,7 @@ fn handle_offer(
 
     let bytes = run_receive_loop(config, secure, &dest_root, &mut manifest, sink)?;
     manifest.save()?;
+    secure.graceful_close();
     sink.on_event(ProgressEvent::TransferCompleted {
         transfer_id,
         bytes_transferred: bytes,
@@ -563,6 +564,7 @@ fn handle_sync(
             }
             other => return Err(Error::protocol(format!("expected Complete, got {other:?}"))),
         }
+        secure.graceful_close();
         return Ok(());
     }
 
@@ -592,6 +594,7 @@ fn handle_sync(
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
     let _ = deleted; // reported by the sender from its plan; kept for clarity
+    secure.graceful_close();
     sink.on_event(ProgressEvent::TransferCompleted {
         transfer_id: sync_id,
         bytes_transferred: bytes,

@@ -1,0 +1,58 @@
+name: Desktop installers
+
+# On a version tag, build native desktop installers (.dmg, .msi/.exe, AppImage)
+# with Tauri and attach them to the GitHub Release for that tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Tauri's Linux build needs the WebKitGTK stack.
+      - name: Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf build-essential libssl-dev libgtk-3-dev
+
+      - name: Install frontend deps
+        working-directory: apps/desktop
+        run: npm install
+
+      - name: Build and publish installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "LaptopLink ${{ github.ref_name }}"
+          releaseBody: "Desktop installers. The CLI binaries are attached by the release workflow."
+          releaseDraft: false
+          prerelease: false

@@ -176,6 +176,32 @@ impl SecureStream {
         self.read_pos = 0;
         Ok(())
     }
+
+    /// End the session cleanly.
+    ///
+    /// Flushes, half-closes our write direction (a FIN, so the last message is
+    /// delivered gracefully), then drains inbound bytes until the peer's FIN.
+    /// When both sides do this, neither drops a socket with data still in
+    /// flight, which is what makes Windows raise an abortive reset
+    /// (WSAECONNRESET / "failed to fill whole buffer") and lose the final
+    /// message. Best-effort: every step ignores errors.
+    pub fn graceful_close(&mut self) {
+        use std::net::Shutdown;
+        let _ = self.writer.flush();
+        let _ = self.socket.shutdown(Shutdown::Write);
+        let _ = self
+            .socket
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let mut scratch = [0u8; 256];
+        // Read raw bytes off the socket directly (not decrypted): we only care
+        // about reaching EOF so we close after the peer does.
+        loop {
+            match self.reader.read(&mut scratch) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => continue,
+            }
+        }
+    }
 }
 
 impl Read for SecureStream {

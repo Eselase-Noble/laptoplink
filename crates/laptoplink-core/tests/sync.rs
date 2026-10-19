@@ -2,14 +2,9 @@
 //!
 //! Each test runs a real receiver on a loopback port and a real sync client.
 //!
-//! NOTE: gated off Windows. These tests drive both the sender and the receiver
-//! in one process over a loopback socket. On Windows that specific arrangement
-//! hits an abortive-close race (WSAECONNRESET) during the final-file handshake
-//! that does not occur in real two-process use — the identical transport and
-//! `send_one_file` path are exercised on Windows by the push tests in
-//! `transfer.rs`, which pass. Windows sync is validated separately with two
-//! processes; see docs/FEATURES.md.
-#![cfg(not(windows))]
+//! Runs on all platforms, including Windows: the sessions end with a graceful
+//! half-close + drain (see `SecureStream::graceful_close`), which avoids the
+//! Windows abortive-reset that used to eat the final message.
 
 use laptoplink_core::config::Config;
 use laptoplink_core::identity::DeviceIdentity;

@@ -292,6 +292,7 @@ fn run_send(
     }
 
     protocol::write_control(&mut secure, &Control::Complete)?;
+    secure.graceful_close();
 
     sink.on_event(ProgressEvent::TransferCompleted {
         transfer_id: transfer_id.to_string(),

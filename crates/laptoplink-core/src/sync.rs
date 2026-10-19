@@ -196,6 +196,7 @@ pub fn sync(
     // performs any deletions after reading `Complete`. The reported deletion
     // count is the receiver's plan (what it will remove when `--delete` is set).
     protocol::write_control(&mut secure, &Control::Complete)?;
+    secure.graceful_close();
 
     let deleted = if opts.delete {
         deletions.len() as u64
