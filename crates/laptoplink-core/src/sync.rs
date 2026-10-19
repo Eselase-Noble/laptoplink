@@ -110,7 +110,8 @@ pub fn sync(
         });
     }
 
-    let mut secure = send::connect_and_hello(config, identity, target_addr, sink)?;
+    let mut secure = send::connect_and_hello(config, identity, target_addr, sink)
+        .map_err(|e| Error::other(format!("step=connect_and_hello: {e}")))?;
 
     protocol::write_control(
         &mut secure,
@@ -123,11 +124,14 @@ pub fn sync(
             delta: opts.delta,
             excludes: opts.excludes.clone(),
         },
-    )?;
+    )
+    .map_err(|e| Error::other(format!("step=write_SyncOffer: {e}")))?;
 
     // The receiver's plan: per-file skip/transfer decisions + deletions.
     let (plans, deletions, conflicts) =
-        match protocol::read_control(&mut secure, config.limits.max_message_bytes)? {
+        match protocol::read_control(&mut secure, config.limits.max_message_bytes)
+            .map_err(|e| Error::other(format!("step=read_SyncResponse: {e}")))?
+        {
             Control::SyncResponse {
                 files,
                 deletions,
@@ -180,11 +184,13 @@ pub fn sync(
                     &offers[idx],
                     file_index,
                     sink,
-                )?;
+                )
+                .map_err(|e| Error::other(format!("step=delta_send_file[{idx}]: {e}")))?;
                 bytes_transferred += sent;
             } else {
                 let (sent, _) =
-                    send::send_one_file(config, &mut secure, item, &offers[idx], &plan, sink)?;
+                    send::send_one_file(config, &mut secure, item, &offers[idx], &plan, sink)
+                        .map_err(|e| Error::other(format!("step=send_one_file[{idx}]: {e}")))?;
                 bytes_transferred += sent;
             }
         }
@@ -195,7 +201,8 @@ pub fn sync(
     // pending read (which Windows turns into an abortive reset). The receiver
     // performs any deletions after reading `Complete`. The reported deletion
     // count is the receiver's plan (what it will remove when `--delete` is set).
-    protocol::write_control(&mut secure, &Control::Complete)?;
+    protocol::write_control(&mut secure, &Control::Complete)
+        .map_err(|e| Error::other(format!("step=write_Complete: {e}")))?;
 
     let deleted = if opts.delete {
         deletions.len() as u64
