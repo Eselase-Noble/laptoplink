@@ -78,8 +78,9 @@ cargo build --release
 install -m 0755 target/release/laplink target/release/laptoplink /usr/local/bin/
 ```
 
-It builds and is tested on Linux, macOS, and Windows. The CI workflow runs the
-whole suite on all three.
+It is built and end-to-end tested on Linux and macOS. It also builds and
+passes unit tests on Windows, but Windows end-to-end transfer is still
+experimental and unvalidated (see docs/FEATURES.md).
 
 ## Send a file to another machine
 

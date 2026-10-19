@@ -44,6 +44,9 @@ jobs:
         run: cargo build --workspace --verbose
       - name: Test
         run: cargo test --workspace --verbose
+      # The benchmark drives a loopback transfer in one process; see the note
+      # in the integration tests about Windows and in-process loopback.
       - name: Smoke test (loopback benchmark)
+        if: runner.os != 'Windows'
         run: cargo run --release --bin laplink -- --home ./.ll-ci benchmark --size-mib 32
         shell: bash

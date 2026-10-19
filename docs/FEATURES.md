@@ -91,12 +91,17 @@ Legend: ✅ done & tested · 🟡 partial · ⬜ not started
 - ⬜ Signed release artifacts & SBOM
 
 ## Platform notes
-- The sync integration tests run on Linux and macOS. They are gated off Windows
-  because driving both sender and receiver in a single process over loopback
-  trips a Windows abortive-close race (WSAECONNRESET) at the final-file
-  handshake that does not occur in real two-process use. The same transport and
-  transfer path are covered on Windows by the push tests. Two-process Windows
-  validation of sync is tracked as remaining work.
+- **Linux and macOS**: fully built and end-to-end tested in CI (unit +
+  integration + loopback benchmark).
+- **Windows**: builds and passes unit tests in CI. The end-to-end integration
+  tests are gated off Windows: running both sender and receiver in a single
+  process over loopback triggers Windows-specific file-locking and socket
+  teardown behavior (Access Denied / unexpected EOF / abortive reset) in that
+  arrangement. Whether this affects real two-process Windows transfers is not
+  yet determined. **Windows is therefore experimental and unvalidated for now**;
+  two-process Windows validation (and any fixes it surfaces) is tracked as
+  remaining work. Prebuilt Windows binaries are still produced by the release
+  workflow for testing.
 
 ## Known limitations (today)
 - Local network only; no NAT traversal or relay yet.
