@@ -2,6 +2,8 @@
 //! rename. These encapsulate the platform-specific details of our durability
 //! and permission guarantees in one place.
 
+#[cfg(windows)]
+use crate::error::Error;
 use crate::error::Result;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -83,11 +85,46 @@ pub fn sync_parent_dir(path: &Path) -> Result<()> {
 
 /// Atomically replace `dest` with `src` (same filesystem). On success the
 /// destination either fully reflects `src` or is unchanged — never partial.
+///
+/// On Windows `rename` can intermittently fail with "Access is denied" when an
+/// antivirus/indexer momentarily holds the freshly written source or the
+/// existing destination; it also will not overwrite in every case. So on
+/// Windows we retry briefly, and fall back to removing an existing destination
+/// before the final rename.
 pub fn atomic_rename(src: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::rename(src, dest)?;
+
+    #[cfg(windows)]
+    {
+        let mut last: Option<std::io::Error> = None;
+        for attempt in 0u64..10 {
+            match std::fs::rename(src, dest) {
+                Ok(()) => {
+                    last = None;
+                    break;
+                }
+                Err(e) => {
+                    // If a stale destination is blocking us, try to clear it.
+                    if dest.exists() {
+                        let _ = std::fs::remove_file(dest);
+                    }
+                    last = Some(e);
+                    std::thread::sleep(std::time::Duration::from_millis(40 * (attempt + 1)));
+                }
+            }
+        }
+        if let Some(e) = last {
+            return Err(Error::Io(e));
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        std::fs::rename(src, dest)?;
+    }
+
     sync_parent_dir(dest)?;
     Ok(())
 }

@@ -3,12 +3,10 @@
 //! Each test stands up a real receiver on an ephemeral loopback port and runs
 //! a real sender against it over the encrypted Noise transport, no mocks.
 //!
-//! NOTE: gated off Windows. These tests drive sender and receiver in a single
-//! process over loopback, which on Windows hits file-locking and socket
-//! teardown behaviors (Access Denied / unexpected EOF / abortive reset) that
-//! are specific to that in-process arrangement. Windows end-to-end transfer is
-//! not yet validated; see docs/FEATURES.md. Unit tests still run on Windows.
-#![cfg(not(windows))]
+//! These run on all platforms, including Windows (the push path is validated
+//! there now). The one exception is the concurrent-receive test, which drives
+//! two senders and a receiver in a single process over loopback and trips a
+//! Windows-only same-process socket-teardown race; it stays gated off Windows.
 
 use laptoplink_core::chunk;
 use laptoplink_core::config::Config;
@@ -215,6 +213,9 @@ fn sender_dest_is_honored_only_when_allowed() {
     );
 }
 
+// Single-process loopback with two senders trips a Windows teardown race; the
+// real two-process path works. Keep this one off Windows.
+#[cfg(not(windows))]
 #[test]
 fn concurrent_receive_from_two_senders() {
     let tmp = tempfile::tempdir().unwrap();

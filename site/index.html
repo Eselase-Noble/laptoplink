@@ -351,15 +351,23 @@
     </div>
 
     <details class="dl-script">
-      <summary>Prefer a one-line install? (macOS &amp; Linux)</summary>
+      <summary>Prefer a one-line install?</summary>
       <div class="term small" style="margin-top:14px">
+        <div class="bar"><i></i><i></i><i></i><span class="lbl">macOS &amp; Linux</span></div>
         <div class="body">
           <span class="sigil">$</span>
           <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
           <button id="copy">Copy</button>
         </div>
       </div>
-      <p class="cmd-note" style="margin-top:12px">Downloads the latest release and installs <code>laplink</code> (and the <code>laptoplink</code> alias). If a piped install is blocked on your network: <code>curl -fsSL &lt;url&gt; -o install.sh &amp;&amp; bash install.sh</code></p>
+      <div class="term small" style="margin-top:12px">
+        <div class="bar"><i></i><i></i><i></i><span class="lbl">Windows · PowerShell</span></div>
+        <div class="body">
+          <span class="sigil">&gt;</span>
+          <code>irm https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.ps1 | iex</code>
+        </div>
+      </div>
+      <p class="cmd-note" style="margin-top:12px">Each installs <code>laplink</code> (and the <code>laptoplink</code> alias) and adds it to your PATH. Update later with <code>laplink update</code>.</p>
     </details>
   </div>
 </section>

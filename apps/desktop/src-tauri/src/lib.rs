@@ -128,6 +128,7 @@ fn start_receiver(
     state: State<'_, AppState>,
     dest: String,
     accept_new: bool,
+    allow_sender_dest: bool,
 ) -> Result<String, String> {
     let dest = PathBuf::from(dest);
     std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
@@ -142,10 +143,16 @@ fn start_receiver(
             accept_new,
             device_name: identity.name.clone(),
             once: false,
-            allow_sender_dest: false,
+            allow_sender_dest,
         };
-        let mut sink = EventSink { app: app2.clone() };
-        if let Err(e) = recv::listen(&config, &identity, &bind_thread, &opts, &mut sink) {
+        // Concurrent: the desktop receiver can accept several transfers at once.
+        let app3 = app2.clone();
+        let make_sink = move || -> Box<dyn laptoplink_core::progress::ProgressSink> {
+            Box::new(EventSink { app: app3.clone() })
+        };
+        if let Err(e) =
+            recv::listen_concurrent(&config, &identity, &bind_thread, &opts, make_sink)
+        {
             let _ = app2.emit(
                 "ll://progress",
                 serde_json::json!({ "kind": "note", "message": format!("receiver stopped: {e}") }),

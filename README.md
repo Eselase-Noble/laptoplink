@@ -62,9 +62,16 @@ latest prebuilt release for your OS and architecture:
 curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash
 ```
 
-On Windows, download the `.zip` from the
+On Windows, run this in PowerShell (installs to your user profile, adds it to
+PATH, no admin needed):
+
+```powershell
+irm https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.ps1 | iex
+```
+
+Or download the `.zip` from the
 [Releases page](https://github.com/Eselase-Noble/laptoplink/releases) and put
-`laplink.exe` somewhere on your PATH.
+`laplink.exe` on your PATH yourself.
 
 ### Or build from source
 
