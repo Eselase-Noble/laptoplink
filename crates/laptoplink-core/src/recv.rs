@@ -990,7 +990,18 @@ fn finalize_file(
     if let Some(parent) = dest_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    fsutil::atomic_rename(&rf.part_path, &dest_path)?;
+    fsutil::atomic_rename(&rf.part_path, &dest_path).map_err(|e| {
+        Error::Other(format!(
+            "could not write '{}' into {} ({e}). On Windows this is usually a \
+             write-protected folder. Check Defender Controlled Folder Access, \
+             or receive into a normal folder like Downloads.",
+            rf.rel_path,
+            dest_path
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        ))
+    })?;
 
     // Preserve the source mtime so a later `sync` can skip this file by its
     // size + mtime signature instead of re-transferring it every run.
@@ -1044,7 +1055,18 @@ fn finalize_delta(
     if let Some(parent) = dest_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    fsutil::atomic_rename(part_path, &dest_path)?;
+    fsutil::atomic_rename(part_path, &dest_path).map_err(|e| {
+        Error::Other(format!(
+            "could not write '{}' into {} ({e}). On Windows this is usually a \
+             write-protected folder. Check Defender Controlled Folder Access, \
+             or receive into a normal folder like Downloads.",
+            rf.rel_path,
+            dest_path
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        ))
+    })?;
     if let Some(secs) = rf.src_mtime {
         if let Ok(f) = std::fs::File::options().write(true).open(&dest_path) {
             let _ = f.set_modified(UNIX_EPOCH + Duration::from_secs(secs));

@@ -336,7 +336,7 @@
 <section class="install" id="download">
   <div class="wrap">
     <h2>Download</h2>
-    <p class="lede">Two ways to run LaptopLink: the <strong>desktop app</strong> (a window with drag-and-drop), or the <strong>command line</strong> (a single <code class="inlinecode">laplink</code> binary). <span id="dlVersion">v0.1.1</span>.</p>
+    <p class="lede">Two ways to run LaptopLink: the <strong>desktop app</strong> (a window with drag-and-drop), or the <strong>command line</strong> (a single <code class="inlinecode">laplink</code> binary). <span id="dlVersion">v0.1.2</span>.</p>
 
     <h3 class="dl-h">Desktop app</h3>
     <div class="dl">
@@ -345,11 +345,11 @@
       </a>
     </div>
     <div class="dl-all">
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_aarch64.dmg">macOS · .dmg (Apple Silicon)</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_x64-setup.exe">Windows · .exe</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_amd64.deb">Ubuntu / Debian · .deb</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink_0.1.1_amd64.AppImage">Linux · .AppImage</a>
-      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.1/LaptopLink-0.1.1-1.x86_64.rpm">Fedora / RHEL · .rpm</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.2/LaptopLink_0.1.2_aarch64.dmg">macOS · .dmg (Apple Silicon)</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.2/LaptopLink_0.1.2_x64-setup.exe">Windows · .exe</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.2/LaptopLink_0.1.2_amd64.deb">Ubuntu / Debian · .deb</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.2/LaptopLink_0.1.2_amd64.AppImage">Linux · .AppImage</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.2/LaptopLink-0.1.2-1.x86_64.rpm">Fedora / RHEL · .rpm</a>
     </div>
 
     <h3 class="dl-h" style="margin-top:34px">Command line</h3>
@@ -459,7 +459,7 @@ laplink doctor                      check identity, port, and setup</pre>
   // Point the big "Download the app" button at the desktop installer for the
   // visitor's OS.
   (function(){
-    var V = "v0.1.1";
+    var V = "v0.1.2";
     var base = "https://github.com/Eselase-Noble/laptoplink/releases/download/" + V + "/";
     var ua = navigator.userAgent || "";
     var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
@@ -468,11 +468,11 @@ laplink doctor                      check identity, port, and setup</pre>
     if (!btn || !lbl) return;
     var asset = null, label = null;
     if (/Win/i.test(plat) || /Windows/i.test(ua)) {
-      asset = "LaptopLink_0.1.1_x64-setup.exe"; label = "Download for Windows";
+      asset = "LaptopLink_0.1.2_x64-setup.exe"; label = "Download for Windows";
     } else if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) {
-      asset = "LaptopLink_0.1.1_aarch64.dmg"; label = "Download for macOS";
+      asset = "LaptopLink_0.1.2_aarch64.dmg"; label = "Download for macOS";
     } else if (/Linux/i.test(plat) || /Linux/i.test(ua)) {
-      asset = "LaptopLink_0.1.1_amd64.AppImage"; label = "Download for Linux";
+      asset = "LaptopLink_0.1.2_amd64.AppImage"; label = "Download for Linux";
     }
     if (asset) { btn.href = base + asset; lbl.textContent = label; }
   })();

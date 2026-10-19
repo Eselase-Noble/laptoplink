@@ -99,10 +99,11 @@ pub fn atomic_rename(src: &Path, dest: &Path) -> Result<()> {
     #[cfg(windows)]
     {
         let mut last: Option<std::io::Error> = None;
+        let mut ok = false;
         for attempt in 0u64..10 {
             match std::fs::rename(src, dest) {
                 Ok(()) => {
-                    last = None;
+                    ok = true;
                     break;
                 }
                 Err(e) => {
@@ -115,8 +116,21 @@ pub fn atomic_rename(src: &Path, dest: &Path) -> Result<()> {
                 }
             }
         }
-        if let Some(e) = last {
-            return Err(Error::Io(e));
+        // Fallback: a transient lock (e.g. antivirus holding the source) can
+        // block rename where a plain copy still succeeds. Copy then remove.
+        if !ok {
+            match std::fs::copy(src, dest) {
+                Ok(_) => {
+                    let _ = std::fs::remove_file(src);
+                    ok = true;
+                }
+                Err(e) => last = Some(e),
+            }
+        }
+        if !ok {
+            if let Some(e) = last {
+                return Err(Error::Io(e));
+            }
         }
     }
 
