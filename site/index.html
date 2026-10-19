@@ -148,6 +148,18 @@
   .alt code{font-family:var(--mono);font-size:13.5px;background:var(--paper);border:1px solid var(--hair);border-radius:6px;padding:2px 7px}
   .alt .two{display:block;margin-top:10px;color:var(--mut);font-size:14px}
 
+  /* ---- download ---- */
+  .inlinecode{font-family:var(--mono);font-size:0.92em;background:var(--paper);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+  .dl{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+  .dl-primary{font-size:17px;padding:16px 26px}
+  .dl-ver{font-family:var(--mono);font-size:13px;color:var(--mut)}
+  .dl-all{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+  .dl-chip{border:1px solid var(--hair);border-radius:10px;padding:11px 16px;font-size:14px;color:var(--ink);transition:border-color .14s,transform .14s}
+  .dl-chip:hover{border-color:var(--ink);transform:translateY(-2px)}
+  .dl-script{margin-top:26px;border-top:1px solid var(--hair);padding-top:18px}
+  .dl-script summary{cursor:pointer;font-size:15px;color:var(--ink-2)}
+  .dl-script summary:hover{color:var(--ink)}
+
   /* ---- using it ---- */
   .use{padding:92px 0;border-bottom:1px solid var(--hair)}
   .use h2{font-size:clamp(28px,4vw,40px);margin-bottom:10px}
@@ -207,7 +219,7 @@
       <a href="#what">What it is</a>
       <a href="#how">How it works</a>
       <a href="#use">Commands</a>
-      <a href="#install">Install</a>
+      <a href="#download">Download</a>
       <a class="src" href="https://github.com/Eselase-Noble/laptoplink">Source</a>
     </nav>
   </div>
@@ -219,7 +231,7 @@
       <h1>A direct line between your computers.</h1>
       <p class="sub">Send a file or a whole folder straight to another machine you own. No cloud in the middle.</p>
       <div class="actions">
-        <a class="btn primary" href="#install">Install laplink</a>
+        <a class="btn primary" href="#download">Download laplink</a>
         <a class="btn secondary" href="https://github.com/Eselase-Noble/laptoplink">Read the source</a>
       </div>
       <p class="micro">Open source, written in Rust. Encrypted end to end and checked byte for byte.</p>
@@ -319,24 +331,36 @@
   </div>
 </section>
 
-<section class="install" id="install">
+<section class="install" id="download">
   <div class="wrap">
-    <h2>Install</h2>
-    <p class="lede">The command is <strong>laplink</strong>. This pulls the latest release for your machine; no Rust toolchain needed.</p>
-    <div class="term">
-      <div class="bar"><i></i><i></i><i></i><span class="lbl">macOS &amp; Linux</span></div>
-      <div class="body">
-        <span class="sigil">$</span>
-        <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
-        <button id="copy">Copy</button>
-      </div>
+    <h2>Download</h2>
+    <p class="lede">Grab the build for your computer. It is a single binary, <strong>laplink</strong>, with no Rust toolchain needed. Already installed? Update any time with <code class="inlinecode">laplink update</code>.</p>
+
+    <div class="dl">
+      <a class="dl-primary btn primary" id="dlPrimary" href="https://github.com/Eselase-Noble/laptoplink/releases/latest">
+        <span id="dlPrimaryLabel">Download</span>
+      </a>
+      <span class="dl-ver" id="dlVersion">v0.1.0</span>
     </div>
-    <p class="alt">
-      Windows: download the <code>.zip</code> from the
-      <a href="https://github.com/Eselase-Noble/laptoplink/releases" style="border-bottom:1px solid var(--ink)">releases page</a>.
-      <span class="two">If a piped install is blocked on your network, do it in two steps:
-      <code>curl -fsSL &lt;url&gt; -o install.sh &amp;&amp; bash install.sh</code></span>
-    </p>
+
+    <div class="dl-all">
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-aarch64-apple-darwin.tar.gz">macOS · Apple Silicon</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-x86_64-apple-darwin.tar.gz">macOS · Intel</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-x86_64-unknown-linux-gnu.tar.gz">Linux · x86-64</a>
+      <a class="dl-chip" href="https://github.com/Eselase-Noble/laptoplink/releases/download/v0.1.0/laplink-v0.1.0-x86_64-pc-windows-msvc.zip">Windows · x86-64</a>
+    </div>
+
+    <details class="dl-script">
+      <summary>Prefer a one-line install? (macOS &amp; Linux)</summary>
+      <div class="term small" style="margin-top:14px">
+        <div class="body">
+          <span class="sigil">$</span>
+          <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Eselase-Noble/laptoplink/production/scripts/install.sh | bash</code>
+          <button id="copy">Copy</button>
+        </div>
+      </div>
+      <p class="cmd-note" style="margin-top:12px">Downloads the latest release and installs <code>laplink</code> (and the <code>laptoplink</code> alias). If a piped install is blocked on your network: <code>curl -fsSL &lt;url&gt; -o install.sh &amp;&amp; bash install.sh</code></p>
+    </details>
   </div>
 </section>
 
@@ -417,10 +441,32 @@ laplink doctor                      check identity, port, and setup</pre>
 </footer>
 
 <script>
-  document.getElementById('copy').addEventListener('click', function(){
+  // Copy the install command.
+  var copyBtn = document.getElementById('copy');
+  if (copyBtn) copyBtn.addEventListener('click', function(){
     var t = document.getElementById('cmd').textContent;
     if(navigator.clipboard){ navigator.clipboard.writeText(t).then(()=>{ this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1400); }); }
   });
+
+  // Point the big download button at the right build for the visitor's OS.
+  (function(){
+    var V = "v0.1.0";
+    var base = "https://github.com/Eselase-Noble/laptoplink/releases/download/" + V + "/";
+    var ua = navigator.userAgent || "";
+    var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+    var btn = document.getElementById('dlPrimary');
+    var lbl = document.getElementById('dlPrimaryLabel');
+    if (!btn || !lbl) return;
+    var asset = null, label = null;
+    if (/Win/i.test(plat) || /Windows/i.test(ua)) {
+      asset = "laplink-" + V + "-x86_64-pc-windows-msvc.zip"; label = "Download for Windows";
+    } else if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) {
+      asset = "laplink-" + V + "-aarch64-apple-darwin.tar.gz"; label = "Download for macOS (Apple Silicon)";
+    } else if (/Linux/i.test(plat) || /Linux/i.test(ua)) {
+      asset = "laplink-" + V + "-x86_64-unknown-linux-gnu.tar.gz"; label = "Download for Linux";
+    }
+    if (asset) { btn.href = base + asset; lbl.textContent = label; }
+  })();
 </script>
 </body>
 </html>

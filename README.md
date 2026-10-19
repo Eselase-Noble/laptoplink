@@ -237,10 +237,11 @@ laptoplink device pair --fingerprint FP     Trust a device by fingerprint
             [--name NAME]
 laptoplink device revoke --fingerprint FP   Stop trusting a device
 
-laptoplink send PATH... --to ADDR           Send files or folders to a device
-            [--chunk-size BYTES] [--id ID]
-            [--dest DIR]                    Ask the receiver to save here
-                                            (receiver must allow it; see below)
+laptoplink send PATH... --to ADDR[,ADDR..]  Send files/folders. Repeat or
+            [--chunk-size BYTES] [--id ID]  comma-separate --to to send the same
+            [--dest DIR]                    files to several devices at once.
+                                            --dest asks the receiver to save
+                                            there (receiver must allow it).
 laptoplink sync SRC_DIR --to ADDR           One way sync a folder's contents
             [--dry-run] [--delete] [--exclude GLOB]...
             [--checksum] [--delta] [--yes]
@@ -261,6 +262,7 @@ laptoplink transfer cancel ID               Mark a transfer cancelled
 laptoplink benchmark [--size-mib N]         Measure throughput over loopback
             [--chunk-size BYTES]
 laptoplink doctor                           Check local setup, port, identity
+laptoplink update                           Update to the latest release
 ```
 
 Global flags that work anywhere: `--json` for machine readable output, `--quiet`,
