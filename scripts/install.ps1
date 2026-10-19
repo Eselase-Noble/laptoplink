@@ -29,8 +29,19 @@ Write-Host ">> installing to $dest"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 if (Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }
 Expand-Archive -Path $tmpZip -DestinationPath $env:TEMP -Force
-Copy-Item (Join-Path $tmpDir "laplink.exe")    (Join-Path $dest "laplink.exe")    -Force
-Copy-Item (Join-Path $tmpDir "laptoplink.exe") (Join-Path $dest "laptoplink.exe") -Force
+
+# A running receiver/agent would lock the exe and block the update. Stop any
+# running copy first (Windows will not overwrite a running executable).
+Get-Process -Name laplink, laptoplink -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 300
+
+try {
+    Copy-Item (Join-Path $tmpDir "laplink.exe")    (Join-Path $dest "laplink.exe")    -Force
+    Copy-Item (Join-Path $tmpDir "laptoplink.exe") (Join-Path $dest "laptoplink.exe") -Force
+} catch {
+    throw "could not replace laplink.exe (is it still running?). Close any 'laplink receive'/'agent' window, then re-run this installer."
+}
 
 # Add to the user PATH if it isn't there yet.
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
